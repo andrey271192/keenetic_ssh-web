@@ -42,7 +42,32 @@
 
 ## Установка
 
-Скопируйте каталог проекта на роутер (например, в `/tmp/keenetic_ssh-web`) или клонируйте репозиторий на ПК и скопируйте через SCP.
+### Одной командой с GitHub (на роутере, Entware)
+
+Нужны **`curl`** или **`wget`** и **`tar`** (обычно уже есть). Скрипт скачает архив ветки **`main`**, распакует во временный каталог и выполнит **`install.sh`** (копирование в `/opt/share/keenetic_ssh-web`, venv, init).
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/bootstrap.sh | sh
+```
+
+Другая ветка или форк:
+
+```sh
+export KSSH_BRANCH=main
+export KSSH_REPO=andrey271192/keenetic_ssh-web
+curl -fsSL "https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/bootstrap.sh" | sh
+```
+
+После установки задайте пароль и (по желанию) список IP:
+
+```sh
+nano /opt/share/keenetic_ssh-web/.env
+/opt/etc/init.d/S99keenetic-ssh-web start
+```
+
+### Установка из уже скачанного каталога
+
+Скопируйте репозиторий на роутер или клонируйте через `git`, затем:
 
 ```sh
 cd /path/to/keenetic_ssh-web
@@ -101,6 +126,20 @@ export WEB_PASSWORD=test
 ---
 
 ## Удаление
+
+### С GitHub (скрипт самодостаточный)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/uninstall.sh | sh
+```
+
+Сохранить каталог с данными (`.env`, `data/`), убрав только сервис:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/uninstall.sh | env KEEP_DATA=1 sh
+```
+
+### Из каталога репозитория
 
 ```sh
 cd /path/to/keenetic_ssh-web

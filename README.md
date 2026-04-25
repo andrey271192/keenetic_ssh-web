@@ -80,7 +80,7 @@ chmod +x install.sh uninstall.sh run.sh bootstrap.sh
 ### Первый запуск
 
 ```sh
-nano /opt/share/keenetic_ssh-web/.env
+vi /opt/share/keenetic_ssh-web/.env
 # ROUTER_HOST=http://127.0.0.1   (если на роутере)
 # ROUTER_LOGIN=admin
 # WEB_PASSWORD=                  (запасной мастер-пароль; можно оставить пустым)
@@ -90,6 +90,8 @@ nano /opt/share/keenetic_ssh-web/.env
 
 /opt/etc/init.d/S99keenetic-ssh-web start
 ```
+
+> На Entware из коробки нет `nano` — используйте `vi`. Если `opkg update` ругается на сторонний репо (например `hoaxisr.github.io`), это не страшно, установка продолжится.
 
 Откройте в браузере: `http://IP_РОУТЕРА:2001` — введите **логин и пароль от веб-админки роутера**.
 

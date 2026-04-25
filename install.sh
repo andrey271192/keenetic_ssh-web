@@ -27,8 +27,10 @@ chmod +x "$INST/run.sh"
 
 echo "==> Entware: python3 + venv"
 if command -v opkg >/dev/null 2>&1; then
-  opkg update
-  opkg install python3 python3-pip python3-light python3-venv 2>/dev/null || opkg install python3 python3-pip 2>/dev/null || true
+  opkg update || echo "(opkg update: частичные ошибки источников — продолжаем)"
+  opkg install python3 python3-pip python3-light python3-venv >/dev/null 2>&1 \
+    || opkg install python3 python3-pip >/dev/null 2>&1 \
+    || echo "(opkg install python3: пропуск — пакеты возможно уже стоят)"
 fi
 
 cd "$INST"
@@ -94,10 +96,19 @@ rm -f "$TMP_INIT"
 chmod +x "$INIT"
 
 echo ""
-echo "Готово. Дальше:"
-echo "  1) nano $INST/.env   — WEB_PASSWORD, при желании ALLOWED_IPS и PORT"
-echo "  2) $INIT start"
-echo "  3) Браузер: http://IP_РОУТЕРА:2001 (или порт из $INST/.env → PORT)"
+echo "============================================================"
+echo "Готово. Установлено в: $INST"
+echo "Init-скрипт:           $INIT"
 echo ""
-echo "Автозапуск после перезагрузки (Entware):"
-echo "  ln -sf $INIT /opt/etc/rc.d/S99keenetic-ssh-web   # если есть rc.d"
+echo "Дальше:"
+echo "  1) (по желанию) vi $INST/.env"
+echo "       ROUTER_HOST=http://127.0.0.1   ROUTER_LOGIN=admin"
+echo "       WEB_PASSWORD=...               PORT=2001"
+echo "       ALLOWED_IPS=192.168.1.100"
+echo "  2) $INIT start"
+echo "  3) Браузер: http://IP_РОУТЕРА:2001"
+echo "     Логин/пароль — от веб-админки роутера (Keenetic)."
+echo ""
+echo "Автозапуск после перезагрузки (если есть rc.d):"
+echo "  ln -sf $INIT /opt/etc/rc.d/S99keenetic-ssh-web"
+echo "============================================================"

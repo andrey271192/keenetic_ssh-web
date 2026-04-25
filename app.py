@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 
-from auth import is_token_valid, issue_token, keenetic_validate, revoke_token
+from auth import is_token_valid, issue_token, keenetic_validate_any, revoke_token
 from brand import inject_brand
 from executor import run_items
 from store import load_store, new_item, save_store
@@ -26,7 +26,8 @@ ALLOWED_IPS_RAW = os.environ.get("ALLOWED_IPS", "").strip()
 ALLOWED_IPS = {x.strip() for x in ALLOWED_IPS_RAW.split(",") if x.strip()} if ALLOWED_IPS_RAW else set()
 CMD_TIMEOUT = int(os.environ.get("CMD_TIMEOUT", "300"))
 
-ROUTER_HOST = os.environ.get("ROUTER_HOST", "http://127.0.0.1").strip()
+ROUTER_HOST_RAW = os.environ.get("ROUTER_HOST", "http://127.0.0.1").strip()
+ROUTER_HOSTS = [h.strip() for h in ROUTER_HOST_RAW.split(",") if h.strip()]
 ROUTER_LOGIN_DEFAULT = os.environ.get("ROUTER_LOGIN", "admin").strip() or "admin"
 ROUTER_TIMEOUT = float(os.environ.get("ROUTER_TIMEOUT", "5") or "5")
 
@@ -64,13 +65,14 @@ def _require():
 
 
 def _validate_credentials(login: str, password: str) -> bool:
-    if ROUTER_HOST:
+    if ROUTER_HOSTS:
         try:
-            if keenetic_validate(ROUTER_HOST, login, password, timeout=ROUTER_TIMEOUT):
+            if keenetic_validate_any(ROUTER_HOSTS, login, password, timeout=ROUTER_TIMEOUT):
                 return True
         except Exception:
             log.exception("router auth call failed")
     if WEB_PASSWORD and password == WEB_PASSWORD:
+        log.info("auth: вход по WEB_PASSWORD (мастер-пароль)")
         return True
     return False
 
@@ -93,12 +95,12 @@ def create_app() -> Flask:
         if not _ip_allowed():
             return jsonify({"ok": False, "error": "IP не разрешён"}), 403
         info = {
-            "router_auth": bool(ROUTER_HOST),
-            "router_host": ROUTER_HOST,
+            "router_auth": bool(ROUTER_HOSTS),
+            "router_hosts": ROUTER_HOSTS,
             "default_login": ROUTER_LOGIN_DEFAULT,
             "password_fallback": bool(WEB_PASSWORD),
         }
-        if not ROUTER_HOST and not WEB_PASSWORD:
+        if not ROUTER_HOSTS and not WEB_PASSWORD:
             return jsonify({"ok": False, "error": "Задайте ROUTER_HOST или WEB_PASSWORD в .env", **info}), 503
         return jsonify({"ok": _auth_ok(), **info})
 
@@ -112,6 +114,7 @@ def create_app() -> Flask:
         if not password:
             return jsonify({"ok": False, "error": "Пустой пароль"}), 400
         if not _validate_credentials(login, password):
+            log.warning("login fail: ip=%s login=%s router_hosts=%s", _client_ip(), login, ROUTER_HOSTS)
             return jsonify({"ok": False, "error": "Неверный логин или пароль"}), 401
         token = issue_token()
         log.info("login ok: ip=%s login=%s", _client_ip(), login)

@@ -32,7 +32,11 @@ def _normalize_host(host: str) -> str:
 
 
 def keenetic_validate(host: str, login: str, password: str, timeout: float = 5.0) -> bool:
-    """Проверяет связку login/password против админки Keenetic по NDM-протоколу."""
+    """Проверяет связку login/password против одной админки Keenetic по NDM-протоколу.
+
+    Логи пишут конкретную причину (unreachable / wrong code / no realm / bad password),
+    чтобы при отказе была видна причина в /opt/var/log/keenetic-ssh-web.log.
+    """
     base = _normalize_host(host)
     if not base or not login or password is None:
         return False
@@ -44,18 +48,21 @@ def keenetic_validate(host: str, login: str, password: str, timeout: float = 5.0
         req = urllib.request.Request(base + "/auth", method="GET")
         with opener.open(req, timeout=timeout) as r:
             if r.status == 200:
+                log.info("auth: %s/auth вернул 200 без креденшелов — пускаем", base)
                 return True
             realm = r.headers.get("X-NDM-Realm", "") or ""
             challenge = r.headers.get("X-NDM-Challenge", "") or ""
     except urllib.error.HTTPError as e:
         if e.code != 401:
+            log.info("auth: GET %s/auth вернул HTTP %d (ожидали 401)", base, e.code)
             return False
         realm = e.headers.get("X-NDM-Realm", "") or ""
         challenge = e.headers.get("X-NDM-Challenge", "") or ""
     except (urllib.error.URLError, OSError) as e:
-        log.warning("auth: router unreachable %s: %s", base, e)
+        log.warning("auth: %s недоступен: %s", base, e)
         return False
     if not realm or not challenge:
+        log.warning("auth: %s/auth не вернул X-NDM-Realm/X-NDM-Challenge — это не Keenetic-админка?", base)
         return False
     md5 = hashlib.md5(f"{login}:{realm}:{password}".encode("utf-8")).hexdigest()
     sha = hashlib.sha256((challenge + md5).encode("utf-8")).hexdigest()
@@ -68,12 +75,30 @@ def keenetic_validate(host: str, login: str, password: str, timeout: float = 5.0
             method="POST",
         )
         with opener.open(req2, timeout=timeout) as r2:
-            return 200 <= r2.status < 300
-    except urllib.error.HTTPError:
+            if 200 <= r2.status < 300:
+                log.info("auth: %s принял login=%s", base, login)
+                return True
+            log.info("auth: %s вернул HTTP %d", base, r2.status)
+            return False
+    except urllib.error.HTTPError as e:
+        log.info("auth: %s POST HTTP %d (неверный логин/пароль?)", base, e.code)
         return False
     except (urllib.error.URLError, OSError) as e:
-        log.warning("auth: post failed %s: %s", base, e)
+        log.warning("auth: %s POST не удался: %s", base, e)
         return False
+
+
+def keenetic_validate_any(hosts: list[str], login: str, password: str, timeout: float = 5.0) -> bool:
+    """Пробует каждый host из списка по очереди; True, если хотя бы один принял."""
+    for h in hosts:
+        if not h:
+            continue
+        try:
+            if keenetic_validate(h, login, password, timeout=timeout):
+                return True
+        except Exception:
+            log.exception("auth: ошибка при проверке %s", h)
+    return False
 
 
 _lock = threading.Lock()

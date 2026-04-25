@@ -25,20 +25,42 @@ fi
 
 chmod +x "$INST/run.sh"
 
-echo "==> Entware: python3 + venv"
+echo "==> Entware: python3 + pip"
 if command -v opkg >/dev/null 2>&1; then
   opkg update || echo "(opkg update: частичные ошибки источников — продолжаем)"
-  opkg install python3 python3-pip python3-light python3-venv >/dev/null 2>&1 \
-    || opkg install python3 python3-pip >/dev/null 2>&1 \
-    || echo "(opkg install python3: пропуск — пакеты возможно уже стоят)"
+  # python3 + pip обязательны; python3-venv — желателен, но в некоторых сборках отсутствует
+  opkg install python3 python3-pip >/dev/null 2>&1 || true
+  opkg install python3-venv python3-light >/dev/null 2>&1 || true
 fi
 
 cd "$INST"
-if [ ! -x venv/bin/python3 ]; then
-  "$PY" -m venv venv || { echo "Не удалось создать venv. Установите: opkg install python3-venv"; exit 1; }
+
+# 1) пробуем venv
+USE_VENV=0
+if [ -x venv/bin/python3 ]; then
+  USE_VENV=1
+elif "$PY" -m venv venv >/tmp/kssh-venv.log 2>&1; then
+  USE_VENV=1
+  echo "==> venv: $INST/venv"
+else
+  echo "==> venv недоступен (нет модуля venv в python3) — ставим зависимости в $INST/lib"
+  rm -rf venv
 fi
-./venv/bin/pip install -q --upgrade pip
-./venv/bin/pip install -q -r requirements.txt
+
+if [ "$USE_VENV" = "1" ]; then
+  ./venv/bin/pip install -q --upgrade pip 2>/dev/null || true
+  ./venv/bin/pip install -q -r requirements.txt
+else
+  # 2) фолбэк: pip install --target=lib (без venv, рабочий путь для старых Entware)
+  if ! "$PY" -m pip --version >/dev/null 2>&1; then
+    echo "ОШИБКА: ни venv, ни pip недоступны. Установите вручную: opkg install python3-pip"
+    exit 1
+  fi
+  rm -rf lib
+  mkdir -p lib
+  "$PY" -m pip install -q --target=lib --upgrade pip 2>/dev/null || true
+  "$PY" -m pip install -q --target=lib -r requirements.txt
+fi
 
 INIT="/opt/etc/init.d/S99keenetic-ssh-web"
 echo "==> Init-скрипт $INIT"
@@ -60,14 +82,22 @@ case "$1" in
       echo "already running"
       exit 0
     fi
-    [ -x "$DIR/venv/bin/python3" ] || { echo "no venv in $DIR"; exit 1; }
     cd "$DIR" || exit 1
+    if [ -x "$DIR/venv/bin/python3" ]; then
+      PYBIN="$DIR/venv/bin/python3"
+    elif [ -d "$DIR/lib" ] && [ -x /opt/bin/python3 ]; then
+      PYBIN="/opt/bin/python3"
+      export PYTHONPATH="$DIR/lib:${PYTHONPATH:-}"
+    else
+      echo "Нет ни $DIR/venv, ни $DIR/lib — установите заново: $DIR/install.sh"
+      exit 1
+    fi
     set -a
     [ -f .env ] && . ./.env
     set +a
     export PYTHONUNBUFFERED=1
     PORT="${PORT:-2001}"
-    nohup "$DIR/venv/bin/python3" -m waitress --listen="0.0.0.0:$PORT" app:app \
+    nohup "$PYBIN" -m waitress --listen="0.0.0.0:$PORT" app:app \
       >>/opt/var/log/keenetic-ssh-web.log 2>&1 &
     echo $! > "$PID"
     echo "keenetic_ssh-web started pid=$(cat "$PID") port=$PORT"

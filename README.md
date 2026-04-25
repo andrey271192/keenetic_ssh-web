@@ -73,9 +73,9 @@ chmod +x install.sh uninstall.sh run.sh bootstrap.sh
 Скрипт:
 
 - копирует файлы в **`/opt/share/keenetic_ssh-web`**
-- создаёт **`venv`**, ставит **Flask** и **Waitress**
+- ставит **Flask** и **Waitress**: предпочтительно в `venv/`; если модуль `venv` в Python отсутствует (типично для `aarch64-k3.10`), то — в локальный `lib/` через `pip install --target`
 - создаёт **`data/store.json`** и **`.env`** из примеров
-- устанавливает **`/opt/etc/init.d/S99keenetic-ssh-web`**
+- устанавливает **`/opt/etc/init.d/S99keenetic-ssh-web`** (автоопределяет venv/lib режим)
 
 ### Первый запуск
 

@@ -97,10 +97,28 @@ case "$1" in
     set +a
     export PYTHONUNBUFFERED=1
     PORT="${PORT:-2001}"
-    nohup "$PYBIN" -m waitress --listen="0.0.0.0:$PORT" app:app \
-      >>/opt/var/log/keenetic-ssh-web.log 2>&1 &
+    LOG="/opt/var/log/keenetic-ssh-web.log"
+    # Запуск в фоне без nohup (его в BusyBox этой сборки нет).
+    # Предпочитаем setsid (новая сессия), иначе сабшелл с trap '' HUP.
+    if command -v setsid >/dev/null 2>&1; then
+      setsid "$PYBIN" -m waitress --listen="0.0.0.0:$PORT" app:app \
+        </dev/null >>"$LOG" 2>&1 &
+    elif command -v nohup >/dev/null 2>&1; then
+      nohup "$PYBIN" -m waitress --listen="0.0.0.0:$PORT" app:app \
+        >>"$LOG" 2>&1 &
+    else
+      ( trap '' HUP; exec "$PYBIN" -m waitress --listen="0.0.0.0:$PORT" app:app \
+        </dev/null >>"$LOG" 2>&1 ) &
+    fi
     echo $! > "$PID"
-    echo "keenetic_ssh-web started pid=$(cat "$PID") port=$PORT"
+    sleep 1
+    if kill -0 "$(cat "$PID")" 2>/dev/null; then
+      echo "keenetic_ssh-web started pid=$(cat "$PID") port=$PORT"
+    else
+      rm -f "$PID"
+      echo "ОШИБКА запуска. Лог: tail -n 30 $LOG"
+      exit 1
+    fi
     ;;
   stop)
     if [ -f "$PID" ]; then
@@ -137,8 +155,15 @@ if [ -d /opt/etc/rc.d ] && [ ! -e /opt/etc/rc.d/S99keenetic-ssh-web ]; then
     echo "==> Автозапуск: /opt/etc/rc.d/S99keenetic-ssh-web → $INIT"
 fi
 
-# Узнаём IP роутера для подсказки в браузер
-ROUTER_IP="$(ip -4 addr show 2>/dev/null | awk '/inet 192\.168\./ {print $2; exit}' | cut -d/ -f1)"
+# Узнаём LAN-IP роутера для подсказки в браузер: ищем 192.168.x.1 / 10.x.x.1
+ROUTER_IP="$(
+  ip -4 -o addr show 2>/dev/null \
+    | awk '$4 ~ /^(192\.168|10|172\.(1[6-9]|2[0-9]|3[01]))\..*\.1\// {sub("/.*","",$4); print $4; exit}'
+)"
+if [ -z "$ROUTER_IP" ]; then
+  ROUTER_IP="$(ifconfig 2>/dev/null \
+    | awk '/inet (addr:)?(192\.168|10\.|172\.)/ {for(i=1;i<=NF;i++) if($i ~ /^(addr:)?(192\.168|10\.|172\.)/){gsub("addr:","",$i); if($i ~ /\.1$/){print $i; exit}}}')"
+fi
 [ -z "$ROUTER_IP" ] && ROUTER_IP="IP_РОУТЕРА"
 
 echo ""

@@ -33,5 +33,3 @@ echo "==> Запуск install.sh"
 
 cd /
 rm -rf "$TMP"
-echo ""
-echo "Готово. Дальше: nano /opt/share/keenetic_ssh-web/.env && /opt/etc/init.d/S99keenetic-ssh-web start"

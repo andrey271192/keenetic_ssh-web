@@ -58,8 +58,8 @@ else
   fi
   rm -rf lib
   mkdir -p lib
-  "$PY" -m pip install -q --target=lib --upgrade pip 2>/dev/null || true
-  "$PY" -m pip install -q --target=lib -r requirements.txt
+  "$PY" -m pip install -q --upgrade --target=lib pip 2>/dev/null || true
+  "$PY" -m pip install -q --upgrade --target=lib -r requirements.txt
 fi
 
 INIT="/opt/etc/init.d/S99keenetic-ssh-web"
@@ -125,20 +125,33 @@ sed "s|@INST@|$INST|g" "$TMP_INIT" > "$INIT"
 rm -f "$TMP_INIT"
 chmod +x "$INIT"
 
+# Автозапуск демона (можно отключить: NO_START=1 ./install.sh)
+if [ "${NO_START:-0}" != "1" ]; then
+  echo "==> Запуск $INIT"
+  "$INIT" restart || echo "(не удалось стартовать; посмотрите лог: tail /opt/var/log/keenetic-ssh-web.log)"
+fi
+
+# Автозапуск после перезагрузки, если в Entware есть rc.d
+if [ -d /opt/etc/rc.d ] && [ ! -e /opt/etc/rc.d/S99keenetic-ssh-web ]; then
+  ln -sf "$INIT" /opt/etc/rc.d/S99keenetic-ssh-web 2>/dev/null && \
+    echo "==> Автозапуск: /opt/etc/rc.d/S99keenetic-ssh-web → $INIT"
+fi
+
+# Узнаём IP роутера для подсказки в браузер
+ROUTER_IP="$(ip -4 addr show 2>/dev/null | awk '/inet 192\.168\./ {print $2; exit}' | cut -d/ -f1)"
+[ -z "$ROUTER_IP" ] && ROUTER_IP="IP_РОУТЕРА"
+
 echo ""
 echo "============================================================"
 echo "Готово. Установлено в: $INST"
 echo "Init-скрипт:           $INIT"
+echo "Лог:                   /opt/var/log/keenetic-ssh-web.log"
 echo ""
-echo "Дальше:"
-echo "  1) (по желанию) vi $INST/.env"
-echo "       ROUTER_HOST=http://127.0.0.1   ROUTER_LOGIN=admin"
-echo "       WEB_PASSWORD=...               PORT=2001"
-echo "       ALLOWED_IPS=192.168.1.100"
-echo "  2) $INIT start"
-echo "  3) Браузер: http://IP_РОУТЕРА:2001"
-echo "     Логин/пароль — от веб-админки роутера (Keenetic)."
+echo "Откройте в браузере: http://${ROUTER_IP}:2001"
+echo "Логин/пароль — как у веб-админки роутера (Keenetic)."
 echo ""
-echo "Автозапуск после перезагрузки (если есть rc.d):"
-echo "  ln -sf $INIT /opt/etc/rc.d/S99keenetic-ssh-web"
+echo "Полезные команды:"
+echo "  $INIT {start|stop|restart}"
+echo "  vi $INST/.env       (правка конфигурации)"
+echo "  tail -f /opt/var/log/keenetic-ssh-web.log"
 echo "============================================================"

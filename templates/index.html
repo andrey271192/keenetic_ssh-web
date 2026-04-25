@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Keenetic SSH Web</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0d1117;--card:#161b22;--card2:#21262d;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#1f6feb;--green:#3fb950;--red:#f85149;--yellow:#d29922}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px 18px 80px;max-width:1100px;margin:0 auto}
+    h1{font-size:1.35rem;font-weight:700;margin-bottom:6px}
+    .sub{color:var(--muted);font-size:.88rem;margin-bottom:22px;line-height:1.45}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+    .card h2{font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    label{font-size:.85rem;color:var(--muted)}
+    input.inp,textarea.ta{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:.88rem;font-family:inherit}
+    input.inp:focus,textarea.ta:focus{outline:none;border-color:var(--accent)}
+    textarea.ta{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.45;width:100%;min-height:120px;resize:vertical}
+    .btn{padding:9px 18px;border-radius:8px;border:none;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-p{background:var(--accent);color:#fff}
+    .btn-p:hover{filter:brightness(1.08)}
+    .btn-d{background:var(--card2);color:var(--text);border:1px solid var(--border)}
+    .btn-g{background:var(--green);color:#0d1117}
+    .btn-r{background:var(--red);color:#fff}
+    .btn:disabled{opacity:.45;cursor:not-allowed}
+    .btn-big{padding:12px 24px;font-size:.95rem}
+    table{width:100%;border-collapse:collapse;font-size:.82rem}
+    th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+    th{color:var(--muted);font-weight:700;font-size:.72rem;text-transform:uppercase}
+    .chk{width:44px;text-align:center}
+    .mono{font-family:ui-monospace,monospace;font-size:11px;word-break:break-all;max-width:280px}
+    .out-wrap{display:none;margin:8px 0 4px;padding:10px;background:#010409;border:1px solid var(--border);border-radius:8px;max-height:220px;overflow:auto}
+    .out-wrap.on{display:block}
+    .out-pre{white-space:pre-wrap;color:#7ee787;font-size:11px;line-height:1.4;margin:0}
+    .out-meta{font-size:10px;color:var(--muted);margin-bottom:6px}
+    .status-ok{color:var(--green);font-weight:600;font-size:11px}
+    .status-bad{color:var(--red);font-weight:600;font-size:11px}
+    .msg{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:.85rem;font-weight:600;display:none}
+    .msg.on{display:block}
+    .msg-ok{background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.35)}
+    .msg-err{background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.35)}
+    #auth-overlay{display:none;position:fixed;inset:0;background:rgba(1,4,9,.96);z-index:200;align-items:center;justify-content:center}
+    .auth-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:min(360px,92vw)}
+    .auth-box h3{margin-bottom:8px;font-size:1.1rem}
+    .auth-box p{color:var(--muted);font-size:.85rem;margin-bottom:16px}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px}
+    .logout{font-size:.8rem;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text)}
+  </style>
+</head>
+<body>
+
+<div id="auth-overlay" style="display:none">
+  <div class="auth-box">
+    <h3>Keenetic SSH Web</h3>
+    <p>Введите пароль из <code>WEB_PASSWORD</code> (файл <code>.env</code> на роутере).</p>
+    <input id="auth-pwd" type="password" class="inp" style="width:100%;margin-bottom:10px" placeholder="Пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="auth-err" class="msg msg-err" style="margin-bottom:8px">Неверный пароль или IP</div>
+    <button class="btn btn-p" style="width:100%" onclick="doLogin()" id="auth-btn">Войти</button>
+  </div>
+</div>
+
+<div class="hdr">
+  <div>
+    <h1>Команды на роутере (Entware)</h1>
+    <p class="sub">Локальный веб-интерфейс: расписание, ручной запуск, вывод stdout/stderr. Работает только на самом Keenetic — команды выполняются в shell на устройстве.</p>
+  </div>
+  <button class="logout" type="button" onclick="logout()">Выйти</button>
+</div>
+
+<div class="card">
+  <h2>Периодическое выполнение</h2>
+  <div class="row">
+    <label>Интервал (мин, 0 — выкл)</label>
+    <input type="number" class="inp" id="iv" min="0" max="10080" style="width:100px">
+    <button class="btn btn-d" onclick="saveInterval()">Сохранить</button>
+  </div>
+  <p class="sub" style="margin-top:10px;margin-bottom:0">По расписанию выполняются только строки с включёнными «ВКЛ» и «Распис.».</p>
+</div>
+
+<div class="card">
+  <h2>Выполнить всё</h2>
+  <button class="btn btn-p btn-big" id="btn-all" onclick="runAll()">Выполнить все команды</button>
+  <p class="sub" style="margin-top:10px;margin-bottom:0">Вручную: все строки с «ВКЛ» (независимо от «Распис.»).</p>
+</div>
+
+<div class="card">
+  <h2>Список команд</h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th class="chk">ВКЛ</th>
+          <th class="chk">Распис.</th>
+          <th>Название</th>
+          <th>Команда</th>
+          <th>Примечание</th>
+          <th>Последний запуск</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div id="glob-msg" class="msg"></div>
+</div>
+
+<div class="card">
+  <h2>Добавить команду</h2>
+  <div class="row" style="align-items:flex-end;margin-bottom:10px">
+    <div><label style="display:block;margin-bottom:4px">Название</label><input class="inp" id="a-name" placeholder="opkg update" style="width:160px"></div>
+    <div style="flex:1;min-width:200px"><label style="display:block;margin-bottom:4px">Команда (shell)</label><input class="inp" id="a-cmd" placeholder="opkg update" style="width:100%"></div>
+    <div style="flex:1;min-width:140px"><label style="display:block;margin-bottom:4px">Примечание</label><input class="inp" id="a-note" placeholder="по желанию" style="width:100%"></div>
+    <button class="btn btn-g" onclick="addItem()">Добавить</button>
+  </div>
+</div>
+
+<script>
+const hdr = () => ({ 'Content-Type': 'application/json', 'X-Web-Password': sessionStorage.getItem('kssh_pwd') || '' });
+
+function showAuth() {
+  const o = document.getElementById('auth-overlay');
+  o.style.display = 'flex';
+  document.getElementById('auth-err').classList.remove('on');
+  setTimeout(() => document.getElementById('auth-pwd').focus(), 80);
+}
+function hideAuth() {
+  document.getElementById('auth-overlay').style.display = 'none';
+}
+
+async function checkAuth() {
+  const p = sessionStorage.getItem('kssh_pwd');
+  if (!p) { showAuth(); return false; }
+  const r = await fetch('/api/auth', { headers: { 'X-Web-Password': p } });
+  if (r.status === 403) { sessionStorage.removeItem('kssh_pwd'); showAuth(); return false; }
+  if (!r.ok) { sessionStorage.removeItem('kssh_pwd'); showAuth(); return false; }
+  const j = await r.json();
+  if (!j.ok) { showAuth(); return false; }
+  hideAuth();
+  return true;
+}
+
+async function doLogin() {
+  const p = document.getElementById('auth-pwd').value;
+  const btn = document.getElementById('auth-btn');
+  const err = document.getElementById('auth-err');
+  err.classList.remove('on');
+  btn.disabled = true;
+  const r = await fetch('/api/auth', { headers: { 'X-Web-Password': p } });
+  btn.disabled = false;
+  if (r.ok) {
+    const j = await r.json();
+    if (j.ok) { sessionStorage.setItem('kssh_pwd', p); hideAuth(); loadAll(); }
+    else err.classList.add('on');
+  } else err.classList.add('on');
+}
+function logout() { sessionStorage.removeItem('kssh_pwd'); showAuth(); }
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+}
+
+let CFG = { interval_minutes: 0, items: [] };
+
+function showMsg(ok, text) {
+  const el = document.getElementById('glob-msg');
+  el.className = 'msg on ' + (ok ? 'msg-ok' : 'msg-err');
+  el.textContent = text;
+  setTimeout(() => { el.className = 'msg'; el.textContent = ''; }, 9000);
+}
+
+async function loadAll() {
+  const r = await fetch('/api/config', { headers: hdr() });
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  if (!r.ok) { showMsg(false, 'Ошибка загрузки'); return; }
+  CFG = await r.json();
+  document.getElementById('iv').value = CFG.interval_minutes | 0;
+  render();
+}
+
+function toggleOut(id) {
+  const w = document.getElementById('out-' + id);
+  if (w) w.classList.toggle('on');
+}
+
+function render() {
+  const tb = document.getElementById('tb');
+  const items = CFG.items || [];
+  if (!items.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px">Пока пусто — добавьте команду ниже.</td></tr>';
+    return;
+  }
+  tb.innerHTML = items.map(it => {
+    const ok = it.last_ok === true;
+    const bad = it.last_ok === false;
+    const st = it.last_run
+      ? `<span class="${ok ? 'status-ok' : bad ? 'status-bad' : ''}">${ok ? 'OK' : bad ? 'Ошибка' : '—'}</span><div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(it.last_run)}</div>`
+      : '<span style="color:var(--muted)">—</span>';
+    const preview = (it.last_output || '').slice(0, 120).replace(/\n/g, ' ');
+    return `<tr>
+      <td class="chk"><input type="checkbox" ${it.enabled ? 'checked' : ''} onchange="patch('${it.id}','enabled',this.checked)"></td>
+      <td class="chk"><input type="checkbox" ${it.schedule ? 'checked' : ''} onchange="patch('${it.id}','schedule',this.checked)"></td>
+      <td><input class="inp" value="${esc(it.name)}" style="width:130px" onchange="patch('${it.id}','name',this.value)"></td>
+      <td class="mono"><input class="inp" value="${esc(it.command)}" style="width:100%;min-width:200px" onchange="patch('${it.id}','command',this.value)"></td>
+      <td class="mono"><input class="inp" value="${esc(it.note)}" style="width:100%;min-width:100px" onchange="patch('${it.id}','note',this.value)"></td>
+      <td style="font-size:11px">${st}</td>
+      <td>
+        <button type="button" class="btn btn-p" style="padding:6px 10px;margin-bottom:4px" onclick="runOne('${it.id}')">Выполнить</button><br>
+        <button type="button" class="btn btn-d" style="padding:6px 10px;margin-bottom:4px" onclick="toggleOut('${it.id}')">Вывод</button><br>
+        <button type="button" class="btn btn-r" style="padding:6px 10px" onclick="delItem('${it.id}')">Удалить</button>
+      </td>
+    </tr>
+    <tr class="out-row"><td colspan="7" style="border-bottom:1px solid var(--border);padding:0 8px 12px;background:#0d1117">
+      <div id="out-${it.id}" class="out-wrap">
+        <div class="out-meta">Полный вывод (последний запуск)</div>
+        <pre class="out-pre">${esc(it.last_output || '(пусто)')}</pre>
+      </div>
+      ${preview ? `<div style="font-size:10px;color:var(--muted);margin-top:4px;max-width:600px;word-break:break-all">${esc(preview)}${(it.last_output||'').length>120?'…':''}</div>` : ''}
+    </td></tr>`;
+  }).join('');
+}
+
+async function patch(id, field, val) {
+  const body = {}; body[field] = val;
+  const r = await fetch('/api/items/' + encodeURIComponent(id), { method: 'PATCH', headers: hdr(), body: JSON.stringify(body) });
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  if (!r.ok) { showMsg(false, await r.text()); loadAll(); return; }
+  const j = await r.json();
+  const ix = (CFG.items || []).findIndex(x => x.id === id);
+  if (ix >= 0) CFG.items[ix] = j.item;
+  render();
+}
+
+async function saveInterval() {
+  const minutes = parseInt(document.getElementById('iv').value, 10) || 0;
+  const r = await fetch('/api/interval', { method: 'POST', headers: hdr(), body: JSON.stringify({ minutes }) });
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  if (!r.ok) { showMsg(false, 'Не сохранено'); return; }
+  CFG.interval_minutes = minutes;
+  showMsg(true, 'Интервал сохранён');
+}
+
+async function addItem() {
+  const name = document.getElementById('a-name').value.trim();
+  const command = document.getElementById('a-cmd').value.trim();
+  const note = document.getElementById('a-note').value.trim();
+  if (!name || !command) { showMsg(false, 'Название и команда обязательны'); return; }
+  const r = await fetch('/api/items', { method: 'POST', headers: hdr(), body: JSON.stringify({ name, command, note, enabled: true, schedule: false }) });
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  if (!r.ok) { showMsg(false, await r.text()); return; }
+  document.getElementById('a-name').value = '';
+  document.getElementById('a-cmd').value = '';
+  document.getElementById('a-note').value = '';
+  await loadAll();
+  showMsg(true, 'Добавлено');
+}
+
+async function delItem(id) {
+  if (!confirm('Удалить команду?')) return;
+  const r = await fetch('/api/items/' + encodeURIComponent(id), { method: 'DELETE', headers: hdr() });
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  await loadAll();
+}
+
+async function runAll() {
+  const b = document.getElementById('btn-all');
+  b.disabled = true;
+  const t = b.textContent;
+  b.textContent = '…';
+  try {
+    const r = await fetch('/api/run-all', { method: 'POST', headers: hdr() });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401 || r.status === 403) { showAuth(); return; }
+    if (!r.ok) { showMsg(false, j.error || r.statusText); return; }
+    await loadAll();
+    const ok = (j.results || []).filter(x => x.ok).length, tot = (j.results || []).length;
+    showMsg(true, 'Готово: ' + ok + ' / ' + tot + ' успешно');
+  } finally { b.disabled = false; b.textContent = t; }
+}
+
+async function runOne(id) {
+  const r = await fetch('/api/run/' + encodeURIComponent(id), { method: 'POST', headers: hdr() });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 || r.status === 403) { showAuth(); return; }
+  if (!r.ok) { showMsg(false, j.error || r.statusText); return; }
+  await loadAll();
+  const o = document.getElementById('out-' + id);
+  if (o) o.classList.add('on');
+  showMsg(!!j.result?.ok, (j.result?.output || j.result?.msg || '').slice(0, 400) || (j.result?.ok ? 'OK' : 'Ошибка'));
+}
+
+(async () => {
+  if (await checkAuth()) await loadAll();
+  else showAuth();
+})();
+</script>
+</body>
+</html>

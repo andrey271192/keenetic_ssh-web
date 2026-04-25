@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 
+from auth import is_token_valid, issue_token, keenetic_validate, revoke_token
 from brand import inject_brand
 from executor import run_items
 from store import load_store, new_item, save_store
@@ -25,6 +26,10 @@ ALLOWED_IPS_RAW = os.environ.get("ALLOWED_IPS", "").strip()
 ALLOWED_IPS = {x.strip() for x in ALLOWED_IPS_RAW.split(",") if x.strip()} if ALLOWED_IPS_RAW else set()
 CMD_TIMEOUT = int(os.environ.get("CMD_TIMEOUT", "300"))
 
+ROUTER_HOST = os.environ.get("ROUTER_HOST", "http://127.0.0.1").strip()
+ROUTER_LOGIN_DEFAULT = os.environ.get("ROUTER_LOGIN", "admin").strip() or "admin"
+ROUTER_TIMEOUT = float(os.environ.get("ROUTER_TIMEOUT", "5") or "5")
+
 _scheduler_started = threading.Lock()
 _last_batch = 0.0
 
@@ -39,22 +44,35 @@ def _client_ip() -> str:
 def _ip_allowed() -> bool:
     if not ALLOWED_IPS:
         return True
-    ip = _client_ip()
-    return ip in ALLOWED_IPS
+    return _client_ip() in ALLOWED_IPS
+
+
+def _token() -> str:
+    return request.headers.get("X-Session-Token", "").strip()
 
 
 def _auth_ok() -> bool:
-    if not WEB_PASSWORD:
-        return False
-    return request.headers.get("X-Web-Password", "") == WEB_PASSWORD
+    return is_token_valid(_token())
 
 
 def _require():
     if not _ip_allowed():
         return jsonify({"error": "IP не в списке ALLOWED_IPS"}), 403
     if not _auth_ok():
-        return jsonify({"error": "Нужен пароль"}), 401
+        return jsonify({"error": "Нужен вход"}), 401
     return None
+
+
+def _validate_credentials(login: str, password: str) -> bool:
+    if ROUTER_HOST:
+        try:
+            if keenetic_validate(ROUTER_HOST, login, password, timeout=ROUTER_TIMEOUT):
+                return True
+        except Exception:
+            log.exception("router auth call failed")
+    if WEB_PASSWORD and password == WEB_PASSWORD:
+        return True
+    return False
 
 
 def create_app() -> Flask:
@@ -73,10 +91,36 @@ def create_app() -> Flask:
     @app.get("/api/auth")
     def auth_check():
         if not _ip_allowed():
-            return jsonify({"ok": False}), 403
-        if not WEB_PASSWORD:
-            return jsonify({"ok": False, "error": "Задайте WEB_PASSWORD в .env"}), 503
-        return jsonify({"ok": _auth_ok()})
+            return jsonify({"ok": False, "error": "IP не разрешён"}), 403
+        info = {
+            "router_auth": bool(ROUTER_HOST),
+            "router_host": ROUTER_HOST,
+            "default_login": ROUTER_LOGIN_DEFAULT,
+            "password_fallback": bool(WEB_PASSWORD),
+        }
+        if not ROUTER_HOST and not WEB_PASSWORD:
+            return jsonify({"ok": False, "error": "Задайте ROUTER_HOST или WEB_PASSWORD в .env", **info}), 503
+        return jsonify({"ok": _auth_ok(), **info})
+
+    @app.post("/api/login")
+    def api_login():
+        if not _ip_allowed():
+            return jsonify({"ok": False, "error": "IP не разрешён"}), 403
+        body = request.get_json(silent=True) or {}
+        login = (str(body.get("login") or ROUTER_LOGIN_DEFAULT)).strip() or ROUTER_LOGIN_DEFAULT
+        password = str(body.get("password") or "")
+        if not password:
+            return jsonify({"ok": False, "error": "Пустой пароль"}), 400
+        if not _validate_credentials(login, password):
+            return jsonify({"ok": False, "error": "Неверный логин или пароль"}), 401
+        token = issue_token()
+        log.info("login ok: ip=%s login=%s", _client_ip(), login)
+        return jsonify({"ok": True, "token": token})
+
+    @app.post("/api/logout")
+    def api_logout():
+        revoke_token(_token())
+        return jsonify({"ok": True})
 
     @app.get("/api/config")
     def get_cfg():

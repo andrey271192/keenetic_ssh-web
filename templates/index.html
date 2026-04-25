@@ -41,11 +41,22 @@
     .msg-ok{background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.35)}
     .msg-err{background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.35)}
     #auth-overlay{display:none;position:fixed;inset:0;background:rgba(1,4,9,.96);z-index:200;align-items:center;justify-content:center}
-    .auth-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:min(360px,92vw)}
+    .auth-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:min(380px,92vw)}
     .auth-box h3{margin-bottom:8px;font-size:1.1rem}
     .auth-box p{color:var(--muted);font-size:.85rem;margin-bottom:16px}
     .hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px}
     .logout{font-size:.8rem;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text)}
+
+    .author-card{background:linear-gradient(135deg,#161b22 0%,#1c2230 100%);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+    .author-card .who{display:flex;align-items:center;gap:12px}
+    .author-card .ava{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1f6feb,#3fb950);display:flex;align-items:center;justify-content:center;font-weight:800;color:#0d1117;font-size:1rem}
+    .author-card .info{display:flex;flex-direction:column;gap:2px}
+    .author-card .name{font-weight:700;font-size:.95rem}
+    .author-card .meta{color:var(--muted);font-size:.78rem}
+    .author-card .links{display:flex;flex-wrap:wrap;gap:6px}
+    .author-card a.lnk{font-size:.78rem;font-weight:600;text-decoration:none;color:var(--text);background:var(--card2);border:1px solid var(--border);padding:6px 11px;border-radius:8px;transition:filter .15s}
+    .author-card a.lnk:hover{filter:brightness(1.2)}
+    .author-card a.donate{background:linear-gradient(135deg,#d29922,#f85149);color:#fff;border:none}
   </style>
 </head>
 <body>
@@ -53,17 +64,34 @@
 <div id="auth-overlay" style="display:none">
   <div class="auth-box">
     <h3>Keenetic SSH Web</h3>
-    <p>Введите пароль из <code>WEB_PASSWORD</code> (файл <code>.env</code> на роутере).</p>
+    <p id="auth-hint">Введите логин и пароль от <b>веб-админки роутера</b>.</p>
+    <input id="auth-login" type="text" class="inp" style="width:100%;margin-bottom:8px" placeholder="Логин (admin)" autocomplete="username">
     <input id="auth-pwd" type="password" class="inp" style="width:100%;margin-bottom:10px" placeholder="Пароль" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-    <div id="auth-err" class="msg msg-err" style="margin-bottom:8px">Неверный пароль или IP</div>
+    <div id="auth-err" class="msg msg-err" style="margin-bottom:8px">Неверный логин или пароль</div>
     <button class="btn btn-p" style="width:100%" onclick="doLogin()" id="auth-btn">Войти</button>
+  </div>
+</div>
+
+<div class="author-card">
+  <div class="who">
+    <div class="ava">A</div>
+    <div class="info">
+      <div class="name">Andrey · keenetic_ssh-web</div>
+      <div class="meta">Локально на Keenetic + Entware · порт 2001 · MIT</div>
+    </div>
+  </div>
+  <div class="links">
+    <a class="lnk" href="https://github.com/andrey271192/keenetic_ssh-web" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <a class="lnk" id="lnk-tg" href="https://t.me/Iot_andrey" target="_blank" rel="noopener noreferrer">Telegram</a>
+    <a class="lnk" href="https://boosty.to/andrey27/donate" target="_blank" rel="noopener noreferrer">Boosty</a>
+    <a class="lnk donate" href="https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798" target="_blank" rel="noopener noreferrer" title="Поддержать проекта (Ozon Bank, СБП)">Поддержать ❤</a>
   </div>
 </div>
 
 <div class="hdr">
   <div>
     <h1>Команды на роутере (Entware)</h1>
-    <p class="sub">Локальный веб-интерфейс: расписание, ручной запуск, вывод stdout/stderr. Работает только на самом Keenetic — команды выполняются в shell на устройстве.</p>
+    <p class="sub">Локальный веб-интерфейс: расписание, ручной запуск, вывод stdout/stderr. Команды выполняются прямо в shell на самом Keenetic. Вход — по паролю от веб-админки роутера.</p>
   </div>
   <button class="logout" type="button" onclick="logout()">Выйти</button>
 </div>
@@ -116,12 +144,17 @@
 </div>
 
 <script>
-const hdr = () => ({ 'Content-Type': 'application/json', 'X-Web-Password': sessionStorage.getItem('kssh_pwd') || '' });
+const TKEY = 'kssh_token';
+const LKEY = 'kssh_login';
+const tok = () => sessionStorage.getItem(TKEY) || '';
+const hdr = () => ({ 'Content-Type': 'application/json', 'X-Session-Token': tok() });
 
 function showAuth() {
   const o = document.getElementById('auth-overlay');
   o.style.display = 'flex';
   document.getElementById('auth-err').classList.remove('on');
+  const lg = document.getElementById('auth-login');
+  if (!lg.value) lg.value = sessionStorage.getItem(LKEY) || 'admin';
   setTimeout(() => document.getElementById('auth-pwd').focus(), 80);
 }
 function hideAuth() {
@@ -129,32 +162,49 @@ function hideAuth() {
 }
 
 async function checkAuth() {
-  const p = sessionStorage.getItem('kssh_pwd');
-  if (!p) { showAuth(); return false; }
-  const r = await fetch('/api/auth', { headers: { 'X-Web-Password': p } });
-  if (r.status === 403) { sessionStorage.removeItem('kssh_pwd'); showAuth(); return false; }
-  if (!r.ok) { sessionStorage.removeItem('kssh_pwd'); showAuth(); return false; }
-  const j = await r.json();
-  if (!j.ok) { showAuth(); return false; }
+  const t = tok();
+  if (!t) { showAuth(); return false; }
+  const r = await fetch('/api/auth', { headers: hdr() });
+  if (!r.ok) { sessionStorage.removeItem(TKEY); showAuth(); return false; }
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) { sessionStorage.removeItem(TKEY); showAuth(); return false; }
   hideAuth();
   return true;
 }
 
 async function doLogin() {
-  const p = document.getElementById('auth-pwd').value;
+  const login = (document.getElementById('auth-login').value || 'admin').trim();
+  const password = document.getElementById('auth-pwd').value;
   const btn = document.getElementById('auth-btn');
   const err = document.getElementById('auth-err');
   err.classList.remove('on');
   btn.disabled = true;
-  const r = await fetch('/api/auth', { headers: { 'X-Web-Password': p } });
-  btn.disabled = false;
-  if (r.ok) {
-    const j = await r.json();
-    if (j.ok) { sessionStorage.setItem('kssh_pwd', p); hideAuth(); loadAll(); }
-    else err.classList.add('on');
-  } else err.classList.add('on');
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login, password }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok && j.token) {
+      sessionStorage.setItem(TKEY, j.token);
+      sessionStorage.setItem(LKEY, login);
+      document.getElementById('auth-pwd').value = '';
+      hideAuth();
+      loadAll();
+    } else {
+      err.textContent = j.error || 'Неверный логин или пароль';
+      err.classList.add('on');
+    }
+  } catch (e) {
+    err.textContent = 'Ошибка связи с сервером';
+    err.classList.add('on');
+  } finally {
+    btn.disabled = false;
+  }
 }
-function logout() { sessionStorage.removeItem('kssh_pwd'); showAuth(); }
+
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST', headers: hdr() }); } catch (e) {}
+  sessionStorage.removeItem(TKEY);
+  showAuth();
+}
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');

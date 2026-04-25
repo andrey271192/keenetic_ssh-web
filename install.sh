@@ -9,7 +9,7 @@ echo "==> Установка в $INST"
 
 mkdir -p "$INST/data" /opt/var/run /opt/var/log 2>/dev/null || mkdir -p "$INST/data"
 
-for f in app.py brand.py executor.py runner.py store.py requirements.txt run.sh; do
+for f in app.py auth.py brand.py executor.py runner.py store.py requirements.txt run.sh; do
   cp -f "$ROOT/$f" "$INST/"
 done
 rm -rf "$INST/templates"

@@ -1,230 +1,328 @@
 # keenetic_ssh-web
 
-> Локальная веб-панель для **Keenetic + Entware**: набор **shell-команд** на роутере (как «RouterSync», но вместо URL — **команда**), **расписание**, ручной запуск **всех** или **одной** команды, просмотр **stdout/stderr**. Работает на самом роутере, слушает порт **2001**. Вход — по **логину и паролю от веб-админки роутера**.
+> Локальная веб-панель для **Keenetic + Entware**: shell-команды на роутере, расписание, ручной запуск, просмотр stdout/stderr. Слушает порт **2001**. Авторизация — логин/пароль от веб-админки роутера.
+>
+> + опциональный модуль **`tunnel/`** — WireGuard VPS↔роутер, чтобы дотянуться до панели и SSH с **серого IP**, без проброса портов.
 
 Репозиторий: [github.com/andrey271192/keenetic_ssh-web](https://github.com/andrey271192/keenetic_ssh-web)
 
 ---
 
-## Что внутри
+## В репозитории два независимых пакета
 
-| Что | Что делает |
-|---|---|
-| **Список команд** | `ВКЛ` / `Распис.` / `Название` / `Команда (shell)` / `Примечание` / `Последний запуск` / `Действия`. |
-| **Расписание** | Один общий интервал в минутах. Запускаются строки с `ВКЛ` **и** `Распис.` (`0` — только ручной режим). |
-| **«Выполнить всё»** | Запускает все строки с `ВКЛ` (независимо от `Распис.`). |
-| **«Вывод»** | Раскрывает полный **stdout + stderr** последнего запуска. |
-| **Авторизация** | По логину/паролю **веб-админки роутера** (NDM-протокол). Запасной мастер-пароль `WEB_PASSWORD` — опционально. |
-| **Сессии** | Сессионный токен на 8 часов, лежит в `sessionStorage` браузера. |
-| **Шапка автора и донат** | GitHub, Telegram, Boosty, Ozon (СБП) — наверху страницы. |
-| **Лог** | `/opt/var/log/keenetic-ssh-web.log`. |
+| Пакет | Куда ставится | Зачем | Обязателен |
+|---|---|---|---|
+| **A. keenetic_ssh-web** | роутер (Entware) | веб-панель команд на 2001 | да |
+| **B. tunnel** | VPS (Ubuntu) + роутер | WG-туннель для серого IP | нет, по желанию |
 
-Команды выполняются **на том же хосте**, где работает Python (ваш Keenetic), с дополнением `PATH` для **Entware** (`/opt/bin`, `/opt/sbin` и т. д.).
+**Ставятся и удаляются отдельно**. Пакет B нужен только если у роутера серый IP и вы хотите управлять им из интернета через свой VPS. Если у вас белый IP / KeenDNS Cloud / достаточно LAN — ставьте только A.
+
+> ⚠️ **Скрипты установки/удаления НЕ трогают** `hrneo`/`hrweb` (HydraRoute Neo), XKeen, Domain Hydra и любые ваши кастомные пакеты Entware. Не правят `/opt/etc/opkg.conf`, не сбрасывают чужие правила iptables, не ставят/удаляют пакеты, не относящиеся к данным двум пакетам.
 
 ---
 
-<a id="white-ip-wan"></a>
+## Сценарии и что ставить
 
-## Важно: доступ только из доверенной сети
-
-Панель выполняет **произвольные команды в shell на роутере**. Размещайте её **только в доверенной сети**, не публикуйте в открытый интернет.
-
-- В `.env` укажите **`ALLOWED_IPS`** — список IP клиентов через запятую. Пустое значение = фильтр выключен (**не рекомендуется** на WAN).
-- Закройте порт **`2001`** на межсетевом экране Keenetic для всего интернета, кроме нужных адресов.
-- Вход в любом случае требует пароль (от админки роутера или `WEB_PASSWORD`).
+| Сценарий | Доступ | Что ставить |
+|---|---|---|
+| Управляю только из дома (LAN) | `http://192.168.X.1:2001` | только **A** |
+| Серый IP, нужен доступ из любой точки | `https://имя.домен` через ваш VPS | **A** + **B** + reverse-proxy на VPS |
+| Белый IP / KeenDNS Cloud | проброс портов или KeenDNS на 2001 | только **A** (B не нужен) |
 
 ---
 
-## Требования
+# A. keenetic_ssh-web — установка
 
-- Keenetic с **Entware**
-- `python3`, желательно `python3-venv` (`opkg install python3-venv`)
-- Свободный порт **2001** (или другой в `.env`)
-- Доступная HTTP-админка Keenetic (по умолчанию `http://127.0.0.1` с самого роутера)
+## A.1. Требования
 
----
+- Keenetic с **Entware** (`opkg` доступен)
+- `python3` — установится автоматически из `bin.entware.net`
+- Свободный порт **2001** (можно переопределить в `.env`)
 
-## Установка
-
-### Одной командой с GitHub (на роутере, Entware)
-
-Нужны **`curl`** или **`wget`** и **`tar`**. Скрипт скачает архив ветки `main`, распакует во временный каталог и выполнит `install.sh` (копирование в `/opt/share/keenetic_ssh-web`, venv, init).
+## A.2. Установка одной командой (на роутере)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/bootstrap.sh | sh
 ```
 
-Другая ветка или форк:
+Что делает:
+- скачивает архив ветки `main`, кладёт в `/opt/share/keenetic_ssh-web`
+- ставит **только** `python3`, `python3-pip`, `python3-venv` (если их нет)
+- кладёт init-скрипт `/opt/etc/init.d/S99keenetic-ssh-web` и rc.d-симлинк
+- стартует сервис на порту 2001
+- создаёт `.env` из примера и подставляет в `ROUTER_HOST` LAN-IP роутера
 
+В конце выведет адрес панели: `http://<LAN-IP>:2001`. Логин/пароль — от веб-админки роутера.
+
+> Другая ветка/форк: `KSSH_BRANCH=dev KSSH_REPO=user/repo curl … | sh`.
+
+## A.3. Конфиг — `/opt/share/keenetic_ssh-web/.env`
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `ROUTER_HOST` | HTTP-адреса админки Keenetic для проверки логина (через запятую — пробуем по очереди). Установщик сам подставит LAN-IP. | `http://127.0.0.1` |
+| `ROUTER_LOGIN` | Логин по умолчанию в форме входа | `admin` |
+| `ROUTER_TIMEOUT` | Таймаут запроса к `/auth`, сек | `5` |
+| `WEB_PASSWORD` | Запасной мастер-пароль (если админка недоступна) | пусто |
+| `PORT` | HTTP-порт панели | `2001` |
+| `CMD_TIMEOUT` | Таймаут одной shell-команды, сек | `300` |
+| `ALLOWED_IPS` | Белый список IP клиентов (через запятую). Пусто = всех. | пусто |
+| `AUTHOR_TELEGRAM_USERNAME` | username для ссылки в шапке | `Iot_andrey` |
+
+После правки:
 ```sh
-export KSSH_BRANCH=main
-export KSSH_REPO=andrey271192/keenetic_ssh-web
-curl -fsSL "https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/bootstrap.sh" | sh
+/opt/etc/init.d/S99keenetic-ssh-web restart
+tail -f /opt/var/log/keenetic-ssh-web.log
 ```
 
-### Установка из уже скачанного каталога
+> ⚠️ **Безопасность.** Панель выполняет произвольные shell-команды с правами процесса (на Entware часто root). Не открывайте порт 2001 в интернет напрямую. Используйте `ALLOWED_IPS` или туннель + reverse-proxy с HTTPS (см. пакет B).
+
+## A.4. Управление сервисом
 
 ```sh
-cd /path/to/keenetic_ssh-web
-chmod +x install.sh uninstall.sh run.sh bootstrap.sh
-./install.sh
-```
-
-Скрипт:
-
-- копирует файлы в **`/opt/share/keenetic_ssh-web`**
-- ставит **Flask** и **Waitress**: предпочтительно в `venv/`; если модуль `venv` в Python отсутствует (типично для `aarch64-k3.10`), то — в локальный `lib/` через `pip install --target`
-- создаёт **`data/store.json`** и **`.env`** из примеров
-- устанавливает **`/opt/etc/init.d/S99keenetic-ssh-web`** (автоопределяет venv/lib режим)
-
-### Первый запуск
-
-```sh
-vi /opt/share/keenetic_ssh-web/.env
-# ROUTER_HOST=http://127.0.0.1   (если на роутере)
-# ROUTER_LOGIN=admin
-# WEB_PASSWORD=                  (запасной мастер-пароль; можно оставить пустым)
-# PORT=2001
-# ALLOWED_IPS=192.168.1.100      (по желанию)
-# AUTHOR_TELEGRAM_USERNAME=Iot_andrey
-
 /opt/etc/init.d/S99keenetic-ssh-web start
+/opt/etc/init.d/S99keenetic-ssh-web stop
+/opt/etc/init.d/S99keenetic-ssh-web restart
+tail -f /opt/var/log/keenetic-ssh-web.log
+vi /opt/share/keenetic_ssh-web/.env
 ```
 
-> На Entware из коробки нет `nano` — используйте `vi`. Если `opkg update` ругается на сторонний репо (например `hoaxisr.github.io`), это не страшно, установка продолжится.
+## A.5. Удаление keenetic_ssh-web
 
-Откройте в браузере: `http://IP_РОУТЕРА:2001` — введите **логин и пароль от веб-админки роутера**.
-
-**Автозапуск** (если у вашей сборки Entware есть `rc.d`):
-
-```sh
-ln -sf /opt/etc/init.d/S99keenetic-ssh-web /opt/etc/rc.d/S99keenetic-ssh-web
-```
-
-Лог: `/opt/var/log/keenetic-ssh-web.log`
-
----
-
-## Ручной запуск (без init)
-
-```sh
-cd /opt/share/keenetic_ssh-web
-chmod +x run.sh
-./run.sh
-```
-
-Для разработки на ПК (без роутера):
-
-```sh
-python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
-# на ПК `ROUTER_HOST` оставьте пустым и используйте мастер-пароль:
-export ROUTER_HOST=
-export WEB_PASSWORD=test
-./venv/bin/python app.py
-# или: ./venv/bin/python -m waitress --listen=127.0.0.1:2001 app:app
-```
-
----
-
-## Удаление
-
-### С GitHub (скрипт самодостаточный)
-
+С GitHub:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/uninstall.sh | sh
 ```
 
-Сохранить каталог с данными (`.env`, `data/`), убрав только сервис:
-
+Сохранить `data/store.json` и `.env`:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/uninstall.sh | env KEEP_DATA=1 sh
 ```
 
-### Из каталога репозитория
+Удаляет ровно: `/opt/share/keenetic_ssh-web/`, `/opt/etc/init.d/S99keenetic-ssh-web`, `/opt/etc/rc.d/S99keenetic-ssh-web`, pid-файл.
+**Не удаляет:** `python3`, `wireguard-tools`, `hrneo`, `hrweb`, любые другие пакеты Entware, лог `/opt/var/log/keenetic-ssh-web.log`.
+
+---
+
+# B. tunnel — установка (опционально, для серых IP)
+
+```
+[твой ПК] → https://router.домен (VPS, белый IP)
+              │ Caddy/Nginx reverse-proxy
+              ▼
+         wg0 10.99.0.1 (VPS)
+              ⇅  WireGuard, UDP/51820
+         wg0 10.99.0.X (роутер за NAT провайдера)
+              ▼
+   127.0.0.1:2001  keenetic_ssh-web
+   127.0.0.1:22    SSH
+```
+
+Туннель **инициирует роутер** наружу — серый IP / NAT провайдера не мешает.
+
+## B.1. На VPS (Ubuntu) — один раз
 
 ```sh
-cd /path/to/keenetic_ssh-web
-chmod +x uninstall.sh
-./uninstall.sh
-# Сохранить данные:
-KEEP_DATA=1 ./uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/server-install.sh | sudo sh
+```
+
+Что делает:
+- `apt install wireguard wireguard-tools curl`
+- генерит серверные ключи (`/etc/wireguard/server_{private,public}.key`)
+- создаёт `/etc/wireguard/wg0.conf` (UDP 51820, IP `10.99.0.1/24`)
+- ставит утилиту `kssh-tun` в `/usr/local/bin/`
+- открывает `51820/udp` и `wg0` в `ufw`/`iptables`, если активны
+- запускает `wg-quick@wg0` и ставит на автозапуск
+
+В конце печатает Endpoint и серверный PublicKey.
+
+## B.2. На VPS — добавить роутер (peer)
+
+```sh
+sudo kssh-tun add router-name
+```
+
+Утилита:
+- генерит ключи клиента, выделяет IP `10.99.0.X`
+- сохраняет `/etc/wireguard/peers/<name>.peer`
+- регенерирует `wg0.conf` и применяет (`systemctl restart wg-quick@wg0`)
+- **выводит готовую команду для роутера** — четыре `export` + `curl … | sh`
+
+Прочие команды:
+```sh
+sudo kssh-tun list                  # список peer-ов
+sudo kssh-tun show <name>           # повторно вывести ENV-блок
+sudo kssh-tun remove <name>         # удалить peer
+sudo kssh-tun status                # wg show wg0
+```
+
+## B.3. На роутере — поднять клиент
+
+Скопируйте блок из `kssh-tun add` и выполните на роутере (через SSH/Entware shell):
+
+```sh
+export VPS_ENDPOINT=212.118.42.105:51820
+export VPS_PUBKEY='...'
+export CLIENT_IP=10.99.0.X
+export CLIENT_PRIVKEY='...'
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-install.sh | sh
+```
+
+Что делает:
+- `opkg install wireguard-tools` (если нет)
+- пишет `/opt/etc/wireguard/wg0.conf`
+- поднимает интерфейс `wg0` с адресом `CLIENT_IP/24`
+- ставит init-скрипт `/opt/etc/init.d/S50kssh-tunnel` + rc.d-симлинк
+- **разрешает входящий трафик с туннеля** (`iptables -I INPUT -i wg0 -j ACCEPT` + `rp_filter=2`) — без этого Keenetic режет ответы из VPS, handshake пройдёт, а ping/HTTP — нет
+- пингует `10.99.0.1` для проверки
+
+После этого с VPS:
+```sh
+ping -c 3 10.99.0.X
+ssh root@10.99.0.X            # если на роутере включён SSH
+curl http://10.99.0.X:2001    # панель keenetic_ssh-web (если установлена)
+```
+
+## B.4. Reverse-proxy на VPS (доступ снаружи)
+
+Caddyfile:
+```
+router.example.com {
+    reverse_proxy 10.99.0.X:2001
+}
+```
+
+Caddy выдаст HTTPS, и `https://router.example.com` отдаёт панель роутера. В `.env` keenetic_ssh-web укажите `ALLOWED_IPS=10.99.0.1` — только VPS будет иметь право заходить.
+
+## B.5. Параметры (ENV)
+
+`server-install.sh` (VPS):
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `WG_PORT` | `51820` | UDP-порт сервера |
+| `WG_SUBNET_PREFIX` | `10.99.0` | Первые три октета `/24` |
+| `WG_SERVER_LAST_OCTET` | `1` | Адрес сервера в туннеле |
+| `KSSH_REPO`/`KSSH_BRANCH` | `andrey271192/keenetic_ssh-web` / `main` | Источник `kssh-tun` и `tunnel-install.sh` |
+
+`tunnel-install.sh` (роутер):
+
+| Переменная | Обязательная | Описание |
+|---|---|---|
+| `VPS_ENDPOINT` | да | `<публичный IP>:<порт>` |
+| `VPS_PUBKEY` | да | PublicKey сервера |
+| `CLIENT_IP` | да | IP роутера в туннеле |
+| `CLIENT_PRIVKEY` | да | PrivateKey роутера (выдаёт `kssh-tun add`) |
+| `WG_IF` | `wg0` | Имя интерфейса |
+| `WG_SUBNET` | `10.99.0.1/32` | AllowedIPs клиента. По умолчанию только VPS, чтобы не ломать существующие WG-маршруты Keenetic. Поставьте `10.99.0.0/24` для peer-to-peer. |
+| `WG_KEEPALIVE` | `25` | `PersistentKeepalive`, сек (нужен из-за NAT провайдера) |
+
+## B.6. Удаление tunnel
+
+### B.6.1. На роутере (только клиент)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-uninstall.sh | sh
+```
+
+Удаляет: интерфейс `wg0`, `/opt/etc/wireguard/wg0.conf`, init-скрипт `S50kssh-tunnel`, rc.d-симлинк, наши правила `iptables ACCEPT для wg0`.
+**Не удаляет:** `wireguard-tools`, общие правила iptables, чужие WG-конфиги, `keenetic_ssh-web`, HydraRoute Neo и др.
+
+### B.6.2. На VPS (сервер)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/server-uninstall.sh | sudo sh
+```
+
+Удаляет: `wg-quick@wg0` (stop+disable), `/etc/wireguard/{wg0.conf,server_*.key,peers/,.kssh-tun.env}`, `/usr/local/bin/kssh-tun`, наши правила ufw/iptables.
+**Не удаляет:** apt-пакеты `wireguard`/`wireguard-tools`, чужие правила ufw/iptables, ваши приложения и Docker.
+
+Если потом захотите снести и сами apt-пакеты — вручную:
+```sh
+sudo apt remove --purge wireguard wireguard-tools
 ```
 
 ---
 
-## Переменные `.env`
+## Полный «с нуля» — пример
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `ROUTER_HOST` | HTTP-адрес админки Keenetic для проверки логина/пароля. На самом роутере — `http://127.0.0.1`. Пусто = выключить роутерную авторизацию. | `http://127.0.0.1` |
-| `ROUTER_LOGIN` | Логин по умолчанию в форме входа. | `admin` |
-| `ROUTER_TIMEOUT` | Таймаут запроса к `/auth` админки, сек. | `5` |
-| `WEB_PASSWORD` | Запасной мастер-пароль. Если роутерная авторизация не сработала и пароль совпал — пустит. Можно оставить пустым. | пусто |
-| `PORT` | Порт HTTP. | `2001` |
-| `CMD_TIMEOUT` | Таймаут одной команды, сек. | `300` |
-| `AUTHOR_TELEGRAM_USERNAME` | Username для ссылки `t.me` в шапке и снизу. | `Iot_andrey` |
-| `ALLOWED_IPS` | Список разрешённых IP клиентов через запятую. Пусто = без фильтра. | пусто |
+Допустим, на роутере уже стоит HydraRoute Neo, и его трогать **нельзя**. Хотим чистую установку обоих пакетов.
 
----
-
-## Как устроена авторизация
-
-1. Браузер → `POST /api/login` с `{login, password}`.
-2. Сервер обращается по `ROUTER_HOST` к `/auth` админки Keenetic, читает `X-NDM-Realm` и `X-NDM-Challenge`, считает хеш `sha256(challenge + md5(login:realm:password))` и шлёт `POST /auth` на роутер.
-3. Если роутер вернул `200 OK` — выдаём сессионный токен (`secrets.token_urlsafe(32)`), TTL **8 часов**, скользящее окно. Клиент кладёт его в `sessionStorage` и шлёт в заголовке `X-Session-Token`.
-4. Если роутерная авторизация не сработала, но `WEB_PASSWORD` задан и совпал — тоже выдаём токен (мастер-пароль).
-
-Никаких паролей в файлах не хранится. Токены живут в памяти процесса — рестарт сервиса = разлогин всех.
-
----
-
-## Безопасность
-
-- Это **не песочница**: команды выполняются с правами процесса (на Entware часто **root**). Не вставляйте непроверенный текст из чужих источников.
-- Не выставляйте порт в интернет без `ALLOWED_IPS` или VPN.
-- Резервная копия команд: `/opt/share/keenetic_ssh-web/data/store.json`.
-- HTTP админки Keenetic на loopback (`http://127.0.0.1`) — это нормально для запросов с самого роутера. Между ПК и роутером используйте проводную/WiFi LAN или VPN.
-
----
-
-## Поддержка проекта
-
-- **Boosty:** [boosty.to/andrey27/donate](https://boosty.to/andrey27/donate)
-- **Ozon Bank (СБП):** [ссылка на оплату](https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798)
-- **Telegram:** [@Iot_andrey](https://t.me/Iot_andrey)
-- **GitHub:** [andrey271192](https://github.com/andrey271192)
-
-Кнопка **Sponsor** на GitHub ведёт на варианты из `.github/FUNDING.yml`.
-
----
-
-## Удалённый доступ через VPS (туннель WireGuard)
-
-Если у роутера **серый IP**, а нужно дотянуться до панели/SSH с интернета — поднимите WireGuard-туннель: см. [tunnel/README.md](tunnel/README.md).
-
-Кратко:
-
+**1. На VPS:**
 ```sh
-# На VPS (Ubuntu) — один раз
+# (если что-то стояло раньше)
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/server-uninstall.sh | sudo sh
+
+# свежая установка сервера туннеля
 curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/server-install.sh | sudo sh
 
-# На VPS — для каждого роутера
-sudo kssh-tun add router-XYZ
-# → выводит готовую команду с 4 ENV для роутера
-
-# На роутере — копируете эту команду и выполняете
+# завести роутер
+sudo kssh-tun add my-router
+# → скопировать выданный 5-строчный блок
 ```
 
-После этого с VPS роутер доступен по `10.99.0.X:любой-порт`. Никаких изменений в `keenetic_ssh-web` и других сервисах не требуется.
+**2. На роутере:**
+```sh
+# (если что-то стояло раньше — оба пакета по отдельности)
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-uninstall.sh | sh
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/uninstall.sh | sh
+
+# панель
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/bootstrap.sh | sh
+
+# туннель — вставить выданный с VPS блок (4 export + curl)
+export VPS_ENDPOINT=...
+export VPS_PUBKEY='...'
+export CLIENT_IP=10.99.0.X
+export CLIENT_PRIVKEY='...'
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-install.sh | sh
+```
+
+**3. Проверка с VPS:**
+```sh
+ping -c 3 10.99.0.X
+curl -I http://10.99.0.X:2001/
+```
+
+`hrneo`/`hrweb` (HydraRoute Neo) и любые ваши кастомные репозитории на обоих хостах остаются нетронутыми.
 
 ---
 
-## Связанные проекты
+## Что лежит где
 
-- [keenetic-unified](https://github.com/andrey271192/keenetic-unified) — мониторинг и управление с **VPS** по SSH (нужен «белый» IP на WAN для SSH).
-- В **keenetic_ssh-web** всё работает **локально на роутере** — белый IP не нужен; ограничение `ALLOWED_IPS` + файрвол по-прежнему рекомендуется.
+### keenetic_ssh-web (на роутере)
+| Путь | |
+|---|---|
+| `/opt/share/keenetic_ssh-web/` | приложение, `.env`, `data/store.json`, venv/lib |
+| `/opt/etc/init.d/S99keenetic-ssh-web` | init-скрипт |
+| `/opt/etc/rc.d/S99keenetic-ssh-web` | автозапуск |
+| `/opt/var/log/keenetic-ssh-web.log` | лог |
+| `/opt/var/run/keenetic-ssh-web.pid` | pid |
+
+### tunnel — клиент (на роутере)
+| Путь | |
+|---|---|
+| `/opt/etc/wireguard/wg0.conf` | конфиг туннеля |
+| `/opt/etc/init.d/S50kssh-tunnel` | init-скрипт |
+| `/opt/etc/rc.d/S50kssh-tunnel` | автозапуск |
+
+### tunnel — сервер (на VPS)
+| Путь | |
+|---|---|
+| `/etc/wireguard/wg0.conf` | конфиг сервера (регенерируется `kssh-tun`) |
+| `/etc/wireguard/server_{private,public}.key` | серверные ключи |
+| `/etc/wireguard/peers/<name>.peer` | данные peer-а (имя/IP/ключи) |
+| `/etc/wireguard/.kssh-tun.env` | параметры запуска |
+| `/usr/local/bin/kssh-tun` | утилита |
+| `systemctl status wg-quick@wg0` | сервис |
 
 ---
+
+## Поддержка
+
+- **GitHub:** [andrey271192](https://github.com/andrey271192)
+- **Boosty:** [донат](https://boosty.to/andrey27/donate)
+- **Telegram:** [@Iot_andrey](https://t.me/Iot_andrey)
 
 ## Лицензия
 

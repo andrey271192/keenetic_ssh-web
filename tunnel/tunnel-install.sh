@@ -79,6 +79,15 @@ up() {
   ip addr add "\$ADDR" dev "\$WG_IF"
   ip link set "\$WG_IF" up
   ip route add "\$SUBNET" dev "\$WG_IF" 2>/dev/null || true
+  # Keenetic: входящий трафик на сторонние интерфейсы режется stricht rp_filter +
+  # нет ACCEPT для этих интерфейсов. Без этих двух строк handshake пройдёт, но
+  # пинг и любые ответы VPS→роутер будут молча дропаться.
+  sysctl -w net.ipv4.conf.all.rp_filter=2 >/dev/null 2>&1 || true
+  sysctl -w "net.ipv4.conf.\$WG_IF.rp_filter=2" >/dev/null 2>&1 || true
+  if command -v iptables >/dev/null 2>&1; then
+    iptables -C INPUT  -i "\$WG_IF" -j ACCEPT 2>/dev/null || iptables -I INPUT  1 -i "\$WG_IF" -j ACCEPT
+    iptables -C OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null || iptables -I OUTPUT 1 -o "\$WG_IF" -j ACCEPT
+  fi
   if ! wg show "\$WG_IF" | grep -q '^peer:'; then
     echo "ВНИМАНИЕ: peer не появился в \$WG_IF — handshake не состоится."
     echo "Проверьте \$CONF и перезапустите."
@@ -87,6 +96,14 @@ up() {
 }
 down() {
   ip link del "\$WG_IF" 2>/dev/null || true
+  if command -v iptables >/dev/null 2>&1; then
+    while iptables -C INPUT  -i "\$WG_IF" -j ACCEPT 2>/dev/null; do
+      iptables -D INPUT  -i "\$WG_IF" -j ACCEPT 2>/dev/null || break
+    done
+    while iptables -C OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null; do
+      iptables -D OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null || break
+    done
+  fi
   echo "stopped \$WG_IF"
 }
 

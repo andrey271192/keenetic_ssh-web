@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+  <defs>
+    <style>
+      .bg{fill:#0d1117}
+      .card{fill:#161b22;stroke:#30363d;stroke-width:2}
+      .txt{fill:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif}
+      .mut{fill:#8b949e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif}
+      .ttl{font-size:26px;font-weight:800}
+      .h{font-size:18px;font-weight:800}
+      .p{font-size:15px}
+      .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono',monospace}
+      .accent{fill:#1f6feb}
+      .ok{fill:#3fb950}
+      .pill{fill:#0b1220;stroke:#30363d;stroke-width:2}
+      .arrow{stroke:#3fb950;stroke-width:4;fill:none;marker-end:url(#m)}
+    </style>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb950"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="520"/>
+
+  <text class="txt ttl" x="40" y="60">Установка «серый IP через VPS» — всего 2 шага</text>
+  <text class="mut p" x="40" y="92">Выполняете одну команду на VPS, получаете блок — вставляете его на роутере.</text>
+
+  <!-- Step 1 -->
+  <rect class="card" x="40" y="140" rx="16" ry="16" width="520" height="320"/>
+  <circle cx="80" cy="190" r="18" class="accent"/>
+  <text class="txt h" x="110" y="197">Шаг 1 (на VPS)</text>
+  <text class="mut p" x="70" y="235">Ставим туннель и добавляем роутер:</text>
+
+  <rect class="pill" x="70" y="255" rx="12" ry="12" width="460" height="110"/>
+  <text class="txt p mono" x="90" y="295">curl -fsSL https://raw.githubusercontent.com/</text>
+  <text class="txt p mono" x="90" y="320">andrey271192/keenetic_ssh-web/main/setup-vps.sh</text>
+  <text class="txt p mono" x="90" y="345">| sudo bash -s -- add home --dnat 777</text>
+
+  <text class="mut p" x="70" y="400">Результат: VPS печатает блок <tspan class="mono">export ...</tspan> для роутера.</text>
+
+  <!-- Step 2 -->
+  <rect class="card" x="640" y="140" rx="16" ry="16" width="520" height="320"/>
+  <circle cx="680" cy="190" r="18" class="ok"/>
+  <text class="txt h" x="710" y="197">Шаг 2 (на роутере)</text>
+  <text class="mut p" x="670" y="235">Вставляем блок, который выдал VPS:</text>
+
+  <rect class="pill" x="670" y="255" rx="12" ry="12" width="460" height="140"/>
+  <text class="txt p mono" x="690" y="295">export VPS_ENDPOINT=...</text>
+  <text class="txt p mono" x="690" y="320">export VPS_PUBKEY='...'</text>
+  <text class="txt p mono" x="690" y="345">export CLIENT_IP=10.99.0.X</text>
+  <text class="txt p mono" x="690" y="370">export DNAT_PORTS='777'</text>
+  <text class="txt p mono" x="690" y="395">curl -fsSL .../tunnel-install.sh | sh</text>
+
+  <text class="mut p" x="670" y="445">Готово: открываете <tspan class="mono">http://10.99.0.X:2001</tspan></text>
+
+  <path class="arrow" d="M 560 300 C 600 300, 610 300, 640 300"/>
+</svg>

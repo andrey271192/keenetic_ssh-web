@@ -91,6 +91,7 @@ export VPS_ENDPOINT=$PUB_IP:$WG_PORT
 export VPS_PUBKEY='$SERVER_PUB'
 export CLIENT_IP=$CLIENT_IP
 export CLIENT_PRIVKEY='$CLIENT_PRIV'
+export DNAT_PORTS=81,79
 curl -fsSL https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/tunnel/tunnel-install.sh | sh
 EOF
   echo "============================================================"

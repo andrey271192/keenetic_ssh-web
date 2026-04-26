@@ -42,8 +42,19 @@ EOF
   fi
   install -m 600 "$TMP" "$CONF"
   rm -f "$TMP"
-  if ip link show "$WG_IF" >/dev/null 2>&1; then
-    wg syncconf "$WG_IF" <(wg-quick strip "$WG_IF") 2>/dev/null || true
+  # Самый надёжный способ применить новый конфиг: рестарт wg-quick@WG_IF.
+  # `wg syncconf` через process substitution падал молча на части систем.
+  if command -v systemctl >/dev/null 2>&1 && \
+     systemctl is-enabled "wg-quick@$WG_IF" >/dev/null 2>&1; then
+    systemctl restart "wg-quick@$WG_IF" || \
+      echo "warning: systemctl restart wg-quick@$WG_IF не удался" >&2
+  elif ip link show "$WG_IF" >/dev/null 2>&1; then
+    TMP_STRIP="$(mktemp)"
+    if wg-quick strip "$WG_IF" > "$TMP_STRIP" 2>/dev/null; then
+      wg syncconf "$WG_IF" "$TMP_STRIP" || \
+        echo "warning: wg syncconf не удался — перезапустите wg-quick@$WG_IF" >&2
+    fi
+    rm -f "$TMP_STRIP"
   fi
 }
 

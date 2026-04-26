@@ -12,7 +12,11 @@
 set -e
 
 WG_IF="${WG_IF:-wg0}"
-WG_SUBNET="${WG_SUBNET:-10.99.0.0/24}"
+# Что маршрутизировать в туннель. По умолчанию только сам VPS (/32),
+# чтобы не конфликтовать с возможными существующими маршрутами
+# 10.99.0.0/24 на роутере (другие WG-интерфейсы Keenetic). Если нужен
+# доступ к другим peer-ам в подсети — поставьте WG_SUBNET=10.99.0.0/24.
+WG_SUBNET="${WG_SUBNET:-10.99.0.1/32}"
 WG_KEEPALIVE="${WG_KEEPALIVE:-25}"
 WG_DIR="/opt/etc/wireguard"
 INIT="/opt/etc/init.d/S50kssh-tunnel"

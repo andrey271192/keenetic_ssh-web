@@ -63,9 +63,12 @@ fi
 systemctl enable "wg-quick@${WG_IF}" >/dev/null 2>&1 || true
 systemctl restart "wg-quick@${WG_IF}"
 
-# Открыть UDP-порт в UFW, если он активен
+# UFW: открываем UDP-порт WG и ВЕСЬ трафик внутри туннеля (на самом wg0).
+# Без второго правила handshake пройдёт, а ping/HTTP внутри wg0 будут глохнуть.
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
   ufw allow "${WG_PORT}/udp" >/dev/null 2>&1 || true
+  ufw allow in on "$WG_IF" >/dev/null 2>&1 || true
+  ufw allow out on "$WG_IF" >/dev/null 2>&1 || true
 fi
 
 PUB_IP="$(curl -s4 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"

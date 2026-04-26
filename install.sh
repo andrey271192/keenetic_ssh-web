@@ -27,8 +27,9 @@ if [ ! -f "$INST/.env" ]; then
       | awk '$4 ~ /^(192\.168|10|172\.(1[6-9]|2[0-9]|3[01]))\..*\.1\// {sub("/.*","",$4); print $4; exit}'
   )"
   if [ -n "$LAN_IP_GUESS" ]; then
-    sed -i "s|^ROUTER_HOST=.*|ROUTER_HOST=http://${LAN_IP_GUESS},http://my.keenetic.net,http://127.0.0.1|" "$INST/.env" 2>/dev/null || true
-    echo "==> .env: ROUTER_HOST подставлен LAN-IP $LAN_IP_GUESS (можно изменить в $INST/.env)"
+    DEFAULT_HOSTS="http://${LAN_IP_GUESS},https://${LAN_IP_GUESS},http://${LAN_IP_GUESS}:81,http://my.keenetic.net,https://my.keenetic.net,http://127.0.0.1"
+    sed -i "s|^ROUTER_HOST=.*|ROUTER_HOST=${DEFAULT_HOSTS}|" "$INST/.env" 2>/dev/null || true
+    echo "==> .env: ROUTER_HOST подставлен LAN-IP $LAN_IP_GUESS (HTTP/HTTPS, можно изменить в $INST/.env)"
   fi
   echo "!!! Создан $INST/.env — при необходимости задайте WEB_PASSWORD/ALLOWED_IPS"
 fi

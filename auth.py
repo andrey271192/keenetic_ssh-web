@@ -14,12 +14,18 @@ import http.cookiejar
 import json
 import logging
 import secrets
+import ssl
 import threading
 import time
 import urllib.error
 import urllib.request
 
 log = logging.getLogger("kssh.auth")
+
+# У Keenetic админка на HTTPS обычно с самоподписанным сертификатом — отключаем проверку.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def _normalize_host(host: str) -> str:
@@ -41,7 +47,10 @@ def keenetic_validate(host: str, login: str, password: str, timeout: float = 5.0
     if not base or not login or password is None:
         return False
     cj = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(cj),
+        urllib.request.HTTPSHandler(context=_SSL_CTX),
+    )
     realm = ""
     challenge = ""
     try:

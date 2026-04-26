@@ -47,6 +47,12 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/
 curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash -s -- add my-router
 ```
 
+Если у конкретного роутера «прокси/админка» сидит на другом порту (например `777`), задайте порт при добавлении peer‑а:
+
+```sh
+sudo kssh-tun add my-router --dnat 777
+```
+
 Она выведет **готовый блок** (несколько строк `export ...` + `curl ... | sh`).
 
 **Команда 2 — на роутере (Entware shell):** вставьте выданный блок **как есть**.

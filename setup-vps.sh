@@ -4,6 +4,7 @@
 # Запуск (любой из вариантов):
 #   curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash -s -- add <peer-name>
+#   curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash -s -- add <peer-name> --dnat 777
 #
 # Что делает (одной командой):
 #   1) сносит предыдущий kssh-tunnel сервер (если был)
@@ -33,7 +34,8 @@ curl -fsSL "$RAW/tunnel/server-install.sh" | bash
 if [ "${1:-}" = "add" ] && [ -n "${2:-}" ]; then
   echo
   echo "==> [3/3] Добавление peer '$2'…"
-  /usr/local/bin/kssh-tun add "$2"
+  shift 2
+  /usr/local/bin/kssh-tun add "$@" 
 else
   echo
   echo "==> [3/3] Сервер готов. Добавьте роутер командой:"

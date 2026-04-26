@@ -91,7 +91,7 @@ export VPS_ENDPOINT=$PUB_IP:$WG_PORT
 export VPS_PUBKEY='$SERVER_PUB'
 export CLIENT_IP=$CLIENT_IP
 export CLIENT_PRIVKEY='$CLIENT_PRIV'
-export DNAT_PORTS=81,79
+export DNAT_PORTS='${DNAT_PORTS:-81,79}'
 curl -fsSL https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/tunnel/tunnel-install.sh | sh
 EOF
   echo "============================================================"
@@ -105,6 +105,25 @@ case "$cmd" in
     require_root
     NAME="${1:-}"
     [ -z "$NAME" ] && { echo "usage: kssh-tun add <name>" >&2; exit 1; }
+    shift || true
+    DNAT_PORTS_ARG=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --dnat)
+          DNAT_PORTS_ARG="${2:-}"
+          shift 2 || true
+          ;;
+        --dnat=*)
+          DNAT_PORTS_ARG="${1#--dnat=}"
+          shift || true
+          ;;
+        *)
+          echo "Неизвестный аргумент: $1" >&2
+          echo "usage: kssh-tun add <name> [--dnat 81,79]" >&2
+          exit 1
+          ;;
+      esac
+    done
     case "$NAME" in *[!a-zA-Z0-9_-]*) echo "Имя: только [a-zA-Z0-9_-]" >&2; exit 1;; esac
     mkdir -p "$PEERS_DIR"
     PEER_FILE="$PEERS_DIR/$NAME.peer"
@@ -120,6 +139,7 @@ NAME="$NAME"
 CLIENT_IP="$CLIENT_IP"
 CLIENT_PRIV="$CLIENT_PRIV"
 CLIENT_PUB="$CLIENT_PUB"
+DNAT_PORTS="$DNAT_PORTS_ARG"
 EOF
       chmod 600 "$PEER_FILE"
       regen_conf
@@ -165,7 +185,7 @@ EOF
     cat <<EOF
 kssh-tun — управление WireGuard-клиентами для keenetic_ssh-web tunnel.
 
-  kssh-tun add <name>       добавить peer, вывести ENV-блок для роутера
+  kssh-tun add <name> [--dnat 81,79]   добавить peer, вывести ENV-блок для роутера
   kssh-tun show <name>      повторно вывести ENV-блок
   kssh-tun list             список peer-ов
   kssh-tun remove <name>    удалить peer

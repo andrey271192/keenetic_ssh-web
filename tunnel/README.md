@@ -81,6 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/
 - поднимает интерфейс `wg0` с адресом `CLIENT_IP/24`
 - маршрутизирует `10.99.0.0/24` через `wg0`
 - ставит init-скрипт `/opt/etc/init.d/S50kssh-tunnel` ({start|stop|restart|status}) и rc.d-симлинк автозапуска
+- автоматически добавляет точечный DNAT: вход на `wg0:81` → `LAN_IP:81` (помогает Keenetic‑админке/HTTP Proxy открываться через туннель; удаляется uninstall‑скриптом)
 - в конце пингует `10.99.0.1` (VPS) для проверки
 
 Если ping не прошёл — почти всегда дело в фаерволе VPS: `sudo ufw allow 51820/udp` (или эквивалент для iptables/firewalld).

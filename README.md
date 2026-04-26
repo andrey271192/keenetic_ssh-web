@@ -198,6 +198,27 @@ KEEP_DATA=1 ./uninstall.sh
 
 ---
 
+## Удалённый доступ через VPS (туннель WireGuard)
+
+Если у роутера **серый IP**, а нужно дотянуться до панели/SSH с интернета — поднимите WireGuard-туннель: см. [tunnel/README.md](tunnel/README.md).
+
+Кратко:
+
+```sh
+# На VPS (Ubuntu) — один раз
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/server-install.sh | sudo sh
+
+# На VPS — для каждого роутера
+sudo kssh-tun add router-XYZ
+# → выводит готовую команду с 4 ENV для роутера
+
+# На роутере — копируете эту команду и выполняете
+```
+
+После этого с VPS роутер доступен по `10.99.0.X:любой-порт`. Никаких изменений в `keenetic_ssh-web` и других сервисах не требуется.
+
+---
+
 ## Связанные проекты
 
 - [keenetic-unified](https://github.com/andrey271192/keenetic-unified) — мониторинг и управление с **VPS** по SSH (нужен «белый» IP на WAN для SSH).

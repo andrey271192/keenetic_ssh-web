@@ -1,0 +1,169 @@
+#!/bin/bash
+# kssh-tun — управление peer-ами WireGuard-сервера для keenetic_ssh-web tunnel.
+# Установлен через tunnel/server-install.sh в /usr/local/bin/kssh-tun.
+set -e
+
+ENV_FILE="/etc/wireguard/.kssh-tun.env"
+[ -f "$ENV_FILE" ] || { echo "Сервер не инициализирован. Запустите server-install.sh." >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
+PEERS_DIR="$WG_DIR/peers"
+CONF="$WG_DIR/$WG_IF.conf"
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then echo "Нужны права root (sudo)." >&2; exit 1; fi
+}
+
+regen_conf() {
+  umask 077
+  TMP="$(mktemp)"
+  cat > "$TMP" <<EOF
+[Interface]
+Address = $WG_SERVER_CIDR
+ListenPort = $WG_PORT
+PrivateKey = $(cat "$WG_DIR/server_private.key")
+SaveConfig = false
+
+EOF
+  if [ -d "$PEERS_DIR" ]; then
+    for f in "$PEERS_DIR"/*.peer; do
+      [ -f "$f" ] || continue
+      ( . "$f"
+        cat <<EOF >> "$TMP"
+# peer: $NAME ($CLIENT_IP)
+[Peer]
+PublicKey = $CLIENT_PUB
+AllowedIPs = $CLIENT_IP/32
+
+EOF
+      )
+    done
+  fi
+  install -m 600 "$TMP" "$CONF"
+  rm -f "$TMP"
+  if ip link show "$WG_IF" >/dev/null 2>&1; then
+    wg syncconf "$WG_IF" <(wg-quick strip "$WG_IF") 2>/dev/null || true
+  fi
+}
+
+next_ip() {
+  USED="$WG_SERVER_IP"
+  if [ -d "$PEERS_DIR" ]; then
+    for f in "$PEERS_DIR"/*.peer; do
+      [ -f "$f" ] || continue
+      ip=$(. "$f"; echo "$CLIENT_IP")
+      USED="$USED $ip"
+    done
+  fi
+  for i in $(seq 2 254); do
+    candidate="${WG_SUBNET_PREFIX}.$i"
+    case " $USED " in *" $candidate "*) ;; *) echo "$candidate"; return 0;; esac
+  done
+  echo "Нет свободного IP в подсети ${WG_SUBNET_PREFIX}.0/24" >&2
+  return 1
+}
+
+print_env_block() {
+  PEER_FILE="$1"
+  # shellcheck disable=SC1090
+  . "$PEER_FILE"
+  SERVER_PUB=$(cat "$WG_DIR/server_public.key")
+  PUB_IP="$(curl -s4 -m 3 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
+  echo
+  echo "============================================================"
+  echo "Peer '$NAME' → $CLIENT_IP. Скопируйте на роутер ОДНОЙ командой:"
+  echo
+  cat <<EOF
+VPS_ENDPOINT=$PUB_IP:$WG_PORT \\
+VPS_PUBKEY='$SERVER_PUB' \\
+CLIENT_IP=$CLIENT_IP \\
+CLIENT_PRIVKEY='$CLIENT_PRIV' \\
+sh -c "curl -fsSL https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/tunnel/tunnel-install.sh | sh"
+EOF
+  echo "============================================================"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  add)
+    require_root
+    NAME="${1:-}"
+    [ -z "$NAME" ] && { echo "usage: kssh-tun add <name>" >&2; exit 1; }
+    case "$NAME" in *[!a-zA-Z0-9_-]*) echo "Имя: только [a-zA-Z0-9_-]" >&2; exit 1;; esac
+    mkdir -p "$PEERS_DIR"
+    PEER_FILE="$PEERS_DIR/$NAME.peer"
+    if [ -f "$PEER_FILE" ]; then
+      echo "Peer '$NAME' уже существует — повторно вывожу ENV-блок:"
+    else
+      umask 077
+      CLIENT_IP="$(next_ip)"
+      CLIENT_PRIV="$(wg genkey)"
+      CLIENT_PUB="$(echo "$CLIENT_PRIV" | wg pubkey)"
+      cat > "$PEER_FILE" <<EOF
+NAME="$NAME"
+CLIENT_IP="$CLIENT_IP"
+CLIENT_PRIV="$CLIENT_PRIV"
+CLIENT_PUB="$CLIENT_PUB"
+EOF
+      chmod 600 "$PEER_FILE"
+      regen_conf
+      echo "Добавлен: $NAME → $CLIENT_IP"
+    fi
+    print_env_block "$PEER_FILE"
+    ;;
+  list)
+    if [ ! -d "$PEERS_DIR" ]; then echo "(нет peer-ов)"; exit 0; fi
+    printf "%-30s %s\n" "NAME" "IP"
+    for f in "$PEERS_DIR"/*.peer; do
+      [ -f "$f" ] || continue
+      ( . "$f"; printf "%-30s %s\n" "$NAME" "$CLIENT_IP" )
+    done
+    ;;
+  show)
+    NAME="${1:-}"
+    [ -z "$NAME" ] && { echo "usage: kssh-tun show <name>" >&2; exit 1; }
+    PEER_FILE="$PEERS_DIR/$NAME.peer"
+    [ -f "$PEER_FILE" ] || { echo "нет peer-а: $NAME" >&2; exit 1; }
+    print_env_block "$PEER_FILE"
+    ;;
+  remove|rm|del)
+    require_root
+    NAME="${1:-}"
+    [ -z "$NAME" ] && { echo "usage: kssh-tun remove <name>" >&2; exit 1; }
+    PEER_FILE="$PEERS_DIR/$NAME.peer"
+    [ -f "$PEER_FILE" ] || { echo "нет peer-а: $NAME" >&2; exit 1; }
+    rm -f "$PEER_FILE"
+    regen_conf
+    echo "Удалён: $NAME"
+    ;;
+  _regen)
+    require_root
+    regen_conf
+    ;;
+  status)
+    if command -v wg >/dev/null 2>&1; then
+      wg show "$WG_IF" 2>/dev/null || echo "(wg-интерфейс $WG_IF не поднят)"
+    fi
+    ;;
+  ""|help|-h|--help)
+    cat <<EOF
+kssh-tun — управление WireGuard-клиентами для keenetic_ssh-web tunnel.
+
+  kssh-tun add <name>       добавить peer, вывести ENV-блок для роутера
+  kssh-tun show <name>      повторно вывести ENV-блок
+  kssh-tun list             список peer-ов
+  kssh-tun remove <name>    удалить peer
+  kssh-tun status           wg show $WG_IF
+
+Конфиг: $WG_DIR/$WG_IF.conf  (регенерируется автоматически)
+Peer-файлы: $PEERS_DIR/*.peer
+EOF
+    ;;
+  *)
+    echo "Неизвестная команда: $cmd. См. kssh-tun help" >&2
+    exit 1
+    ;;
+esac

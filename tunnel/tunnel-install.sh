@@ -41,10 +41,12 @@ chmod 700 "$WG_DIR"
 
 CONF="$WG_DIR/$WG_IF.conf"
 umask 077
+# Формат для `wg setconf` — без wg-quick полей (Address/DNS/Table/PostUp...).
+# Address выставляем через `ip addr add` в init-скрипте.
 cat > "$CONF" <<EOF
+# kssh-tunnel client; адрес: $CLIENT_IP/24
 [Interface]
 PrivateKey = $CLIENT_PRIVKEY
-Address = $CLIENT_IP/24
 
 [Peer]
 PublicKey = $VPS_PUBKEY
@@ -65,11 +67,18 @@ SUBNET="$WG_SUBNET"
 
 up() {
   ip link show "\$WG_IF" >/dev/null 2>&1 && ip link del "\$WG_IF" 2>/dev/null
-  ip link add "\$WG_IF" type wireguard
-  wg setconf "\$WG_IF" "\$CONF"
+  ip link add "\$WG_IF" type wireguard || { echo "ip link add не сработал — нет модуля wireguard в ядре?"; return 1; }
+  if ! wg setconf "\$WG_IF" "\$CONF"; then
+    echo "wg setconf вернул ошибку — проверьте \$CONF (формат: только PrivateKey + [Peer])"
+    return 1
+  fi
   ip addr add "\$ADDR" dev "\$WG_IF"
   ip link set "\$WG_IF" up
   ip route add "\$SUBNET" dev "\$WG_IF" 2>/dev/null || true
+  if ! wg show "\$WG_IF" | grep -q '^peer:'; then
+    echo "ВНИМАНИЕ: peer не появился в \$WG_IF — handshake не состоится."
+    echo "Проверьте \$CONF и перезапустите."
+  fi
   echo "started \$WG_IF \$ADDR"
 }
 down() {

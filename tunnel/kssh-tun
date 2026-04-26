@@ -72,14 +72,15 @@ print_env_block() {
   PUB_IP="$(curl -s4 -m 3 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
   echo
   echo "============================================================"
-  echo "Peer '$NAME' → $CLIENT_IP. Скопируйте на роутер ОДНОЙ командой:"
+  echo "Peer '$NAME' → $CLIENT_IP. Скопируйте 5 строк ниже на роутер"
+  echo "(можно блоком, можно по одной — работает в любом shell):"
   echo
   cat <<EOF
-VPS_ENDPOINT=$PUB_IP:$WG_PORT \\
-VPS_PUBKEY='$SERVER_PUB' \\
-CLIENT_IP=$CLIENT_IP \\
-CLIENT_PRIVKEY='$CLIENT_PRIV' \\
-sh -c "curl -fsSL https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/tunnel/tunnel-install.sh | sh"
+export VPS_ENDPOINT=$PUB_IP:$WG_PORT
+export VPS_PUBKEY='$SERVER_PUB'
+export CLIENT_IP=$CLIENT_IP
+export CLIENT_PRIVKEY='$CLIENT_PRIV'
+curl -fsSL https://raw.githubusercontent.com/${KSSH_REPO}/${KSSH_BRANCH}/tunnel/tunnel-install.sh | sh
 EOF
   echo "============================================================"
 }

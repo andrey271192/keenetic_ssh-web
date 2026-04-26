@@ -64,14 +64,14 @@ sudo kssh-tun status                   # wg show wg0
 
 ## 3. На роутере (Keenetic + Entware)
 
-Скопируйте блок из `kssh-tun add` и выполните на роутере. Пример (значения подставит `kssh-tun add`):
+Скопируйте блок из `kssh-tun add` и выполните на роутере (5 строк, можно блоком, можно по одной):
 
 ```sh
-VPS_ENDPOINT=212.118.42.105:51820 \
-VPS_PUBKEY='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=' \
-CLIENT_IP=10.99.0.5 \
-CLIENT_PRIVKEY='yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=' \
-sh -c "curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-install.sh | sh"
+export VPS_ENDPOINT=212.118.42.105:51820
+export VPS_PUBKEY='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx='
+export CLIENT_IP=10.99.0.5
+export CLIENT_PRIVKEY='yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy='
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/tunnel/tunnel-install.sh | sh
 ```
 
 Что делает:

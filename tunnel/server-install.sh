@@ -71,6 +71,19 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
   ufw allow out on "$WG_IF" >/dev/null 2>&1 || true
 fi
 
+# iptables: разрешаем весь трафик с wg0 ДО любых DROP-правил (часто на VPS
+# стоит блокировка ICMP echo-request — она блокирует и пинги через туннель).
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -i "$WG_IF" -j ACCEPT 2>/dev/null \
+    || iptables -I INPUT 1 -i "$WG_IF" -j ACCEPT
+  # Сохранить, если установлен iptables-persistent
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  elif [ -d /etc/iptables ]; then
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+  fi
+fi
+
 PUB_IP="$(curl -s4 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 SERVER_PUB="$(cat "$WG_DIR/server_public.key")"
 

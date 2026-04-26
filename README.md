@@ -32,23 +32,19 @@ curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/
 
 ### Вариант 2. Серый IP, нужен доступ из любой точки (через VPS)
 
-#### 2.1. На VPS (Ubuntu) — поставить сервер туннеля
+#### 2 команды “с нуля” (самый простой путь)
+
+**Команда 1 — на VPS (Ubuntu):** поставить туннель и сразу добавить роутер (peer).
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/andrey271192/keenetic_ssh-web/main/setup-vps.sh | sudo bash -s -- add my-router
 ```
 
-#### 2.2. На VPS — добавить ваш роутер (peer)
+Она выведет **готовый блок** (несколько строк `export ...` + `curl ... | sh`).
 
-```sh
-sudo kssh-tun add my-router
-```
+**Команда 2 — на роутере (Entware shell):** вставьте выданный блок **как есть**.
 
-Команда выведет **готовый блок** (несколько строк `export ...` + `curl ... | sh`) — просто скопируйте его.
-
-#### 2.3. На роутере — поставить панель + клиент туннеля
-
-Вставьте **тот самый блок** на роутере (в Entware shell). Он поднимет `wg0`, а затем установит панель на `2001`.
+Он поднимет `wg0`, а затем установит панель на `2001`.
 
 Проверка с VPS:
 
@@ -57,9 +53,24 @@ curl http://10.99.0.X:2001
 ssh root@10.99.0.X
 ```
 
-Дальше уже красиво делается через HTTPS reverse‑proxy на VPS (Caddy/Nginx):
+Дальше уже красиво делается через HTTPS reverse‑proxy на VPS.
 
-- `router.example.com` → `10.99.0.X:2001`
+**Caddy (3 строки):**
+
+```caddy
+router.example.com {
+  reverse_proxy 10.99.0.X:2001
+}
+```
+
+**Nginx (минимальный server block):**
+
+```nginx
+server {
+  server_name router.example.com;
+  location / { proxy_pass http://10.99.0.X:2001; }
+}
+```
 
 Рекомендация: в `.env` панели выставить **`ALLOWED_IPS=10.99.0.1`**, чтобы к роутеру мог обращаться **только VPS**.
 

@@ -14,7 +14,7 @@ WG_IF="${WG_IF:-wg0}"
 WG_DIR="/opt/etc/wireguard"
 INIT="/opt/etc/init.d/S50kssh-tunnel"
 RCD="/opt/etc/rc.d/S50kssh-tunnel"
-NAT_TAG="kssh-tunnel:ndm81"
+NAT_TAG_PREFIX="kssh-tunnel:dnat"
 
 echo "==> kssh-tunnel: удаление клиента ($WG_IF)"
 
@@ -34,9 +34,9 @@ if command -v iptables >/dev/null 2>&1; then
   while iptables -C OUTPUT -o "$WG_IF" -j ACCEPT 2>/dev/null; do
     iptables -D OUTPUT -o "$WG_IF" -j ACCEPT 2>/dev/null || break
   done
-  # удалить наши DNAT-правила для доступа к NDM через wg0:81
-  while iptables -t nat -S PREROUTING 2>/dev/null | grep -q "$NAT_TAG"; do
-    RULE="$(iptables -t nat -S PREROUTING | grep "$NAT_TAG" | head -n 1 | sed 's/^-A /-D /')"
+  # удалить наши DNAT-правила (только наши теги)
+  while iptables -t nat -S PREROUTING 2>/dev/null | grep -q "$NAT_TAG_PREFIX:$WG_IF:"; do
+    RULE="$(iptables -t nat -S PREROUTING | grep "$NAT_TAG_PREFIX:$WG_IF:" | head -n 1 | sed 's/^-A /-D /')"
     [ -n "$RULE" ] && iptables -t nat $RULE 2>/dev/null || break
   done
 fi

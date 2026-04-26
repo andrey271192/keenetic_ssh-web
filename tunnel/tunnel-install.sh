@@ -20,7 +20,11 @@ WG_SUBNET="${WG_SUBNET:-10.99.0.1/32}"
 WG_KEEPALIVE="${WG_KEEPALIVE:-25}"
 WG_DIR="/opt/etc/wireguard"
 INIT="/opt/etc/init.d/S50kssh-tunnel"
-NAT_TAG="kssh-tunnel:ndm81"
+# DNAT для сервисов, которые слушают только на LAN-IP, но не на wg0.
+# Пример: Keenetic NDM/HTTP Proxy часто на :81 или :79.
+# Порты через запятую, например: DNAT_PORTS=81,79
+DNAT_PORTS="${DNAT_PORTS:-81}"
+NAT_TAG_PREFIX="kssh-tunnel:dnat"
 
 [ -z "$VPS_ENDPOINT" ] && { echo "VPS_ENDPOINT обязателен" >&2; exit 1; }
 [ -z "$VPS_PUBKEY" ] && { echo "VPS_PUBKEY обязателен" >&2; exit 1; }
@@ -69,7 +73,8 @@ WG_DIR="$WG_DIR"
 CONF="\$WG_DIR/\$WG_IF.conf"
 ADDR="$CLIENT_IP/24"
 SUBNET="$WG_SUBNET"
-NAT_TAG="$NAT_TAG"
+DNAT_PORTS="$DNAT_PORTS"
+NAT_TAG_PREFIX="$NAT_TAG_PREFIX"
 
 up() {
   ip link show "\$WG_IF" >/dev/null 2>&1 && ip link del "\$WG_IF" 2>/dev/null
@@ -89,8 +94,8 @@ up() {
   if command -v iptables >/dev/null 2>&1; then
     iptables -C INPUT  -i "\$WG_IF" -j ACCEPT 2>/dev/null || iptables -I INPUT  1 -i "\$WG_IF" -j ACCEPT
     iptables -C OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null || iptables -I OUTPUT 1 -o "\$WG_IF" -j ACCEPT
-    # NDM/HTTP Proxy на Keenetic часто слушает на LAN-IP:81, но не на wg0:81.
-    # Для доступа к /auth через туннель делаем DNAT wg0:81 → LAN_IP:81.
+    # Некоторые сервисы на Keenetic слушают только на LAN-IP:port, но не на wg0:port.
+    # Для доступа через туннель делаем DNAT wg0:port → LAN_IP:port для заданных портов.
     LAN_IP=""
     for IF in br0 br-lan; do
       LAN_IP=\$(ip -4 -o addr show "\$IF" 2>/dev/null | awk '{print \$4}' | cut -d/ -f1 | head -n 1)
@@ -100,8 +105,16 @@ up() {
       LAN_IP=\$(ip -4 -o addr show 2>/dev/null | awk -v wg="\$WG_IF" '\$2!=wg && \$2!=\"lo\" {print \$4}' | cut -d/ -f1 | head -n 1)
     fi
     if [ -n "\$LAN_IP" ]; then
-      iptables -t nat -C PREROUTING -i "\$WG_IF" -p tcp --dport 81 -m comment --comment "\$NAT_TAG" -j DNAT --to-destination "\$LAN_IP:81" 2>/dev/null || \
-        iptables -t nat -I PREROUTING 1 -i "\$WG_IF" -p tcp --dport 81 -m comment --comment "\$NAT_TAG" -j DNAT --to-destination "\$LAN_IP:81" 2>/dev/null || true
+      OLD_IFS="\$IFS"
+      IFS=","
+      for P in \$DNAT_PORTS; do
+        P=\$(echo "\$P" | tr -d ' ')
+        case "\$P" in ""|*[!0-9]*) continue ;; esac
+        TAG="\$NAT_TAG_PREFIX:\$WG_IF:\$P"
+        iptables -t nat -C PREROUTING -i "\$WG_IF" -p tcp --dport "\$P" -m comment --comment "\$TAG" -j DNAT --to-destination "\$LAN_IP:\$P" 2>/dev/null || \
+          iptables -t nat -I PREROUTING 1 -i "\$WG_IF" -p tcp --dport "\$P" -m comment --comment "\$TAG" -j DNAT --to-destination "\$LAN_IP:\$P" 2>/dev/null || true
+      done
+      IFS="\$OLD_IFS"
     fi
   fi
   if ! wg show "\$WG_IF" | grep -q '^peer:'; then
@@ -119,9 +132,9 @@ down() {
     while iptables -C OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null; do
       iptables -D OUTPUT -o "\$WG_IF" -j ACCEPT 2>/dev/null || break
     done
-    # удалить наши DNAT-правила (если были)
-    while iptables -t nat -S PREROUTING 2>/dev/null | grep -q "\$NAT_TAG"; do
-      RULE=\$(iptables -t nat -S PREROUTING | grep "\$NAT_TAG" | head -n 1 | sed 's/^-A /-D /')
+    # удалить наши DNAT-правила (если были) — только с tag-prefix
+    while iptables -t nat -S PREROUTING 2>/dev/null | grep -q "\$NAT_TAG_PREFIX:\$WG_IF:"; do
+      RULE=\$(iptables -t nat -S PREROUTING | grep "\$NAT_TAG_PREFIX:\$WG_IF:" | head -n 1 | sed 's/^-A /-D /')
       [ -n "\$RULE" ] && iptables -t nat \$RULE 2>/dev/null || break
     done
   fi

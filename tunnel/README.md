@@ -74,6 +74,36 @@ sudo kssh-tun status                   # wg show wg0
 
 ## 3. На роутере (Keenetic + Entware)
 
+### 📦 Установка Entware на Keenetic
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚠️ Определи свою архитектуру
+- Mipsel — роутеры на чипе MT7628/MT7621
+- Aarch64 — роутеры на чипе MT7622/MT7981/MT7988 (ARM)
+━━━━━━━━━━━━━━━━━━━━━━
+💡 Совет  
+Начиная с KeeneticOS 4.2 Entware можно установить прямо через браузер — просто открой `192.168.1.1/a` и следуй инструкции.
+━━━━━━━━━━━━━━━━━━━━━━
+🚀 Установка онлайн — одной командой
+
+🔵 Mipsel (MT7628/MT7621)
+```sh
+opkg disk storage:/ https://bin.entware.net/mipselsf-k3.4/installer/mipsel-installer.tar.gz
+```
+
+🟢 Aarch64 (MT7622/MT7981/MT7988)
+```sh
+opkg disk storage:/ https://bin.entware.net/aarch64-k3.10/installer/aarch64-installer.tar.gz
+```
+
+⏳ Дождись окончания установки — это займёт пару минут. После этого Entware готов к работе.
+
+🔌 Подключение по SSH  
+📋 Данные для входа
+- Логин: `root`
+- Пароль: `keenetic`
+- Порт: `222`
+
 Скопируйте блок из `kssh-tun add` и выполните на роутере (5 строк, можно блоком, можно по одной):
 
 ```sh

@@ -29,7 +29,7 @@ _DOT = "color:#86868b;user-select:none"
 
 
 def brand_bar_html(telegram_username: str) -> str:
-    u = (telegram_username or "Iot_andrey").lstrip("@")
+    u = (telegram_username or "PCAdministration").lstrip("@")
     tg = f"https://t.me/{u}"
     safe_u = html.escape(u, quote=True)
     return (

@@ -271,7 +271,7 @@ sudo kssh-tun add my-router --dnat 81
 
 - **Boosty:** `https://boosty.to/andrey27/donate`
 - **Ozon Bank (СБП):** `https://finance.ozon.ru/apps/sbp/ozonbankpay/019dc200-2a5d-7931-a619-782d285f6798`
-- **Telegram:** `https://t.me/Iot_andrey`
+- **Telegram:** `https://t.me/PCAdministration`
 
 Кнопка **Sponsor** на GitHub ведёт на варианты из `.github/FUNDING.yml`.
 ## Лицензия

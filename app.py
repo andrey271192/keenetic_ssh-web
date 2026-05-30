@@ -21,7 +21,7 @@ log = logging.getLogger("kssh")
 APP_DIR = Path(__file__).resolve().parent
 
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "").strip()
-AUTHOR_TG = os.environ.get("AUTHOR_TELEGRAM_USERNAME", "Iot_andrey").strip().lstrip("@") or "Iot_andrey"
+AUTHOR_TG = os.environ.get("AUTHOR_TELEGRAM_USERNAME", "PCAdministration").strip().lstrip("@") or "PCAdministration"
 ALLOWED_IPS_RAW = os.environ.get("ALLOWED_IPS", "").strip()
 ALLOWED_IPS = {x.strip() for x in ALLOWED_IPS_RAW.split(",") if x.strip()} if ALLOWED_IPS_RAW else set()
 CMD_TIMEOUT = int(os.environ.get("CMD_TIMEOUT", "300"))
